@@ -16,4 +16,7 @@ model SectionSchedule {
   @@index([dayOfWeek])
   @@index([startTime])
   @@index([endTime])
+  @@index([room])
+  @@index([dayOfWeek, startTime, endTime])
+  @@index([room, dayOfWeek, startTime, endTime])
 }

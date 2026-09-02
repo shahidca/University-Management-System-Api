@@ -11,4 +11,5 @@ model CoursePrerequisite {
   @@unique([courseId, prerequisiteId])
   @@index([courseId])
   @@index([prerequisiteId])
+  @@index([courseId, prerequisiteId])
 }

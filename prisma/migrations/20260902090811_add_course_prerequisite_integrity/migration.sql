@@ -1,1 +1,3 @@
--- This is an empty migration.
+ALTER TABLE "CoursePrerequisite"
+ADD CONSTRAINT "CoursePrerequisite_no_self_reference"
+CHECK ("courseId" <> "prerequisiteId");

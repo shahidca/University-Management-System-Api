@@ -11,6 +11,9 @@ model Department {
   programs Program[]
   courses  Course[]
 
+  @@index([code])
+  @@index([name])
   @@index([isActive])
   @@index([deletedAt])
+  @@index([isActive, deletedAt])
 }

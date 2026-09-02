@@ -2,6 +2,8 @@ import express from "express";
 import helmet from "helmet";
 import cors from "cors";
 import { prisma } from "./config/database.js";
+import { errorMiddleware } from "./middlewares/error.middleware.js";
+import apiRouter from "./routes/index.js";
 
 const app = express();
 
@@ -15,7 +17,6 @@ app.use(
 );
 
 app.use(express.json());
-
 app.use(express.urlencoded({ extended: true }));
 
 app.get("/health", (_req, res) => {
@@ -50,5 +51,12 @@ app.get("/health/db", async (_req, res) => {
     });
   }
 });
+
+/*
+ * Centralized error handler
+ * Must remain after all routes and middleware.
+ */
+app.use("/api/v1", apiRouter);
+app.use(errorMiddleware);
 
 export default app;

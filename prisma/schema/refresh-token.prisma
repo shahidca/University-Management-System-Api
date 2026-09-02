@@ -12,4 +12,6 @@ model RefreshToken {
   @@index([userId])
   @@index([expiresAt])
   @@index([revokedAt])
+  @@index([userId, expiresAt])
+  @@index([userId, revokedAt])
 }

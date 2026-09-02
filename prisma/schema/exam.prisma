@@ -20,4 +20,7 @@ model Exam {
   @@index([examType])
   @@index([examDate])
   @@index([isPublished])
+  @@index([sectionId, examDate])
+  @@index([sectionId, isPublished])
+  @@index([examType, examDate])
 }

@@ -21,4 +21,7 @@ model Result {
   @@index([enrollmentId])
   @@index([status])
   @@index([grade])
+  @@index([status, publishedAt])
+  @@index([enrollmentId, status])
+  @@index([examId, status])
 }

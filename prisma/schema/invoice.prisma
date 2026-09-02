@@ -22,4 +22,6 @@ model Invoice {
   @@index([dueDate])
   @@index([issuedAt])
   @@index([paidAt])
+  @@index([studentId, status])
+  @@index([status, dueDate])
 }

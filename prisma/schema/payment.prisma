@@ -24,4 +24,6 @@ model Payment {
   @@index([gatewayTransactionId])
   @@index([initiatedAt])
   @@index([completedAt])
+  @@index([invoiceId, status])
+  @@index([gateway, status])
 }

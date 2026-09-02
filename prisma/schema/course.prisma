@@ -23,4 +23,7 @@ model Course {
   @@index([level])
   @@index([isActive])
   @@index([deletedAt])
+  @@index([isActive, deletedAt])
+  @@index([departmentId, isActive, deletedAt])
+  @@index([courseType, level])
 }

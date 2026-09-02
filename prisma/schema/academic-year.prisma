@@ -12,4 +12,6 @@ model AcademicYear {
   @@index([startDate])
   @@index([endDate])
   @@index([isActive])
+  @@index([startDate, endDate])
+  @@index([isActive, startDate, endDate])
 }

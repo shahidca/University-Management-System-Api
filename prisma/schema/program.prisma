@@ -20,4 +20,6 @@ model Program {
   @@index([degree])
   @@index([isActive])
   @@index([deletedAt])
+  @@index([isActive, deletedAt])
+  @@index([departmentId, isActive, deletedAt])
 }

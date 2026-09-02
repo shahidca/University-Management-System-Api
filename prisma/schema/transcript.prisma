@@ -19,4 +19,7 @@ model Transcript {
   @@index([semesterId])
   @@index([status])
   @@index([issuedAt])
+  @@index([studentId, status])
+  @@index([semesterId, status])
+  @@index([status, issuedAt])
 }
