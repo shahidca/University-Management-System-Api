@@ -21,4 +21,6 @@ model Semester {
   @@index([status])
   @@index([startDate])
   @@index([endDate])
+  @@index([registrationOpen])
+  @@index([registrationClose])
 }
