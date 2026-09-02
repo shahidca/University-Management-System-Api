@@ -40,3 +40,26 @@ export const generateRefreshToken = (
     refreshTokenOptions,
   );
 };
+
+export const verifyAccessToken = (
+  token: string,
+): AccessTokenPayload => {
+  const decoded = jwt.verify(
+    token,
+    env.JWT_ACCESS_SECRET,
+  );
+
+  if (
+    typeof decoded !== "object" ||
+    decoded === null ||
+    typeof decoded.userId !== "string" ||
+    typeof decoded.role !== "string"
+  ) {
+    throw new Error("Invalid access token payload");
+  }
+
+  return {
+    userId: decoded.userId,
+    role: decoded.role,
+  };
+};

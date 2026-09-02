@@ -155,3 +155,34 @@ const getRefreshTokenExpiry = (): Date => {
 
   return expiresAt;
 };
+
+export const getCurrentUser = async (
+  userId: string,
+) => {
+  const user = await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      status: true,
+      emailVerifiedAt: true,
+      lastLoginAt: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  if (!user) {
+    throw new AppError(
+      "User account not found",
+      404,
+    );
+  }
+
+  return user;
+};
