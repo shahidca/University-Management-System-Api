@@ -1,0 +1,19 @@
+model Attendance {
+  id           String           @id @default(uuid())
+  enrollmentId String
+  date         DateTime
+  status       AttendanceStatus
+  remarks      String?
+  markedById   String
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  markedBy   User       @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: Restrict)
+
+  @@unique([enrollmentId, date])
+  @@index([enrollmentId])
+  @@index([date])
+  @@index([status])
+  @@index([markedById])
+}

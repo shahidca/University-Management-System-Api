@@ -1,0 +1,20 @@
+model CourseOffering {
+  id         String   @id @default(uuid())
+  courseId   String
+  semesterId String
+  code       String
+  title      String
+  credits    Decimal  @db.Decimal(4, 2)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  course   Course    @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  semester Semester  @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+  sections Section[]
+
+  @@unique([courseId, semesterId])
+  @@index([courseId])
+  @@index([semesterId])
+  @@index([isActive])
+}

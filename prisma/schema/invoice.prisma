@@ -1,0 +1,25 @@
+model Invoice {
+  id            String        @id @default(uuid())
+  studentId     String
+  invoiceNumber String        @unique
+  subtotal      Decimal       @db.Decimal(12, 2)
+  discount      Decimal       @default(0) @db.Decimal(12, 2)
+  totalAmount   Decimal       @db.Decimal(12, 2)
+  dueDate       DateTime
+  status        InvoiceStatus @default(UNPAID)
+  description   String?
+  issuedAt      DateTime      @default(now())
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  student  StudentProfile @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  items    InvoiceItem[]
+  payments Payment[]
+
+  @@index([studentId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([issuedAt])
+  @@index([paidAt])
+}

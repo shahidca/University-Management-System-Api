@@ -1,0 +1,17 @@
+model InvoiceItem {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  feeId       String
+  description String?
+  quantity    Int      @default(1)
+  unitAmount  Decimal  @db.Decimal(12, 2)
+  totalAmount Decimal  @db.Decimal(12, 2)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  fee     Fee     @relation(fields: [feeId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceId])
+  @@index([feeId])
+}

@@ -1,0 +1,24 @@
+model Semester {
+  id                String         @id @default(uuid())
+  academicYearId    String
+  name              String
+  code              String
+  type              SemesterType
+  status            SemesterStatus @default(PLANNED)
+  startDate         DateTime
+  endDate           DateTime
+  registrationOpen  DateTime
+  registrationClose DateTime
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  academicYear    AcademicYear     @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  courseOfferings CourseOffering[]
+  transcripts     Transcript[]
+
+  @@unique([academicYearId, code])
+  @@index([academicYearId])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+}

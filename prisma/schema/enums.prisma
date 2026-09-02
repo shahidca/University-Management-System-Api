@@ -1,0 +1,109 @@
+enum Role {
+  STUDENT
+  INSTRUCTOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum CourseType {
+  THEORY
+  LAB
+  PROJECT
+  SEMINAR
+  THESIS
+}
+
+enum SemesterType {
+  FALL
+  SPRING
+  SUMMER
+}
+
+enum SemesterStatus {
+  PLANNED
+  REGISTRATION_OPEN
+  REGISTRATION_CLOSED
+  ACTIVE
+  COMPLETED
+}
+
+enum EnrollmentStatus {
+  PENDING
+  ENROLLED
+  DROPPED
+  COMPLETED
+  REJECTED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum ExamType {
+  QUIZ
+  ASSIGNMENT
+  MIDTERM
+  FINAL
+  VIVA
+  PROJECT
+  PRESENTATION
+}
+
+enum ResultStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  PUBLISHED
+}
+
+enum TranscriptStatus {
+  DRAFT
+  GENERATED
+  APPROVED
+  ISSUED
+  REVOKED
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentGateway {
+  STRIPE
+  BKASH
+  SSLCOMMERZ
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCESS
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum NotificationType {
+  SYSTEM
+  ACADEMIC
+  ENROLLMENT
+  ATTENDANCE
+  EXAM
+  RESULT
+  PAYMENT
+  INVOICE
+  TRANSCRIPT
+  SECURITY
+}

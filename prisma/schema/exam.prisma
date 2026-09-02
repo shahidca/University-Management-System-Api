@@ -1,0 +1,23 @@
+model Exam {
+  id          String   @id @default(uuid())
+  sectionId   String
+  title       String
+  description String?
+  examType    ExamType
+  totalMarks  Decimal  @db.Decimal(6, 2)
+  examDate    DateTime
+  startTime   String?
+  endTime     String?
+  room        String?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  section Section  @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  results Result[]
+
+  @@index([sectionId])
+  @@index([examType])
+  @@index([examDate])
+  @@index([isPublished])
+}

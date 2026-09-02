@@ -1,0 +1,23 @@
+model Section {
+  id               String   @id @default(uuid())
+  courseOfferingId String
+  instructorId     String
+  sectionCode      String
+  name             String
+  capacity         Int
+  enrolledCount    Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  courseOffering CourseOffering    @relation(fields: [courseOfferingId], references: [id], onDelete: Restrict)
+  instructor     InstructorProfile @relation(fields: [instructorId], references: [id], onDelete: Restrict)
+  schedules      SectionSchedule[]
+  enrollments    Enrollment[]
+  exams          Exam[]
+
+  @@unique([courseOfferingId, sectionCode])
+  @@index([courseOfferingId])
+  @@index([instructorId])
+  @@index([isActive])
+}

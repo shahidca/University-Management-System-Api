@@ -1,0 +1,27 @@
+model Payment {
+  id                   String         @id @default(uuid())
+  invoiceId            String
+  transactionId        String         @unique
+  gateway              PaymentGateway
+  gatewayTransactionId String?
+  amount               Decimal        @db.Decimal(12, 2)
+  currency             String         @default("BDT")
+  status               PaymentStatus  @default(PENDING)
+  paymentUrl           String?
+  initiatedAt          DateTime       @default(now())
+  completedAt          DateTime?
+  failedAt             DateTime?
+  failureReason        String?
+  metadata             Json?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceId])
+  @@index([status])
+  @@index([gateway])
+  @@index([gatewayTransactionId])
+  @@index([initiatedAt])
+  @@index([completedAt])
+}

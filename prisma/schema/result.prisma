@@ -1,0 +1,24 @@
+model Result {
+  id            String       @id @default(uuid())
+  examId        String
+  enrollmentId  String
+  marksObtained Decimal      @db.Decimal(6, 2)
+  grade         String?
+  gradePoint    Decimal?     @db.Decimal(3, 2)
+  status        ResultStatus @default(DRAFT)
+  remarks       String?
+  submittedAt   DateTime?
+  approvedAt    DateTime?
+  publishedAt   DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  exam       Exam       @relation(fields: [examId], references: [id], onDelete: Restrict)
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+
+  @@unique([examId, enrollmentId])
+  @@index([examId])
+  @@index([enrollmentId])
+  @@index([status])
+  @@index([grade])
+}

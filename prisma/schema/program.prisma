@@ -1,0 +1,21 @@
+model Program {
+  id            String   @id @default(uuid())
+  departmentId  String
+  code          String   @unique
+  name          String
+  degree        String
+  durationYears Int
+  totalCredits  Decimal  @db.Decimal(5, 2)
+  description   String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  department Department       @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  students   StudentProfile[]
+
+  @@unique([departmentId, name])
+  @@index([departmentId])
+  @@index([degree])
+  @@index([isActive])
+}

@@ -1,0 +1,22 @@
+model Transcript {
+  id            String           @id @default(uuid())
+  studentId     String
+  semesterId    String?
+  transcriptNo  String           @unique
+  status        TranscriptStatus @default(DRAFT)
+  semesterGpa   Decimal?         @db.Decimal(4, 2)
+  cumulativeGpa Decimal?         @db.Decimal(4, 2)
+  totalCredits  Decimal?         @db.Decimal(6, 2)
+  issuedAt      DateTime?
+  approvedAt    DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  student  StudentProfile @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  semester Semester?      @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+
+  @@index([studentId])
+  @@index([semesterId])
+  @@index([status])
+  @@index([issuedAt])
+}
