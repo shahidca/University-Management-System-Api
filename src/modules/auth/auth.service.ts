@@ -18,7 +18,24 @@ import type {
   LogoutSchemaInput,
   RefreshTokenSchemaInput,
   RegisterSchemaInput,
+  VerifyEmailSchemaInput,
+  ResendVerificationSchemaInput,
+  ForgotPasswordSchemaInput,
+  ResetPasswordSchemaInput,
 } from "./auth.validation.js";
+
+import {
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+} from "../../utils/email.js";
+
+import {
+  generateOtp,
+  getOtpExpiry,
+  hashOtp,
+} from "../../utils/otp.js";
+
+
 
 export const registerUser = async (
   input: RegisterSchemaInput,
@@ -63,8 +80,34 @@ export const registerUser = async (
     },
   });
 
+  const otp = generateOtp();
+
+  const otpHash = hashOtp(otp);
+
+  await prisma.oTP.create({
+    data: {
+      userId: user.id,
+      codeHash: otpHash,
+      expiresAt: getOtpExpiry(10),
+    },
+  });
+
+  try {
+    await sendVerificationEmail(
+      user.email,
+      user.firstName,
+      otp,
+    );
+  } catch (error) {
+    console.error(
+      "Failed to send verification email:",
+      error,
+    );
+  }
+
   return user;
 };
+
 
 export const loginUser = async (
   input: LoginSchemaInput,
@@ -85,6 +128,13 @@ export const loginUser = async (
   if (user.status !== "ACTIVE") {
     throw new AppError(
       "Your account is not active",
+      403,
+    );
+  }
+
+  if (!user.emailVerifiedAt) {
+    throw new AppError(
+      "Please verify your email before logging in",
       403,
     );
   }
@@ -360,4 +410,485 @@ export const getCurrentUser = async (
   }
 
   return user;
+};
+
+export const verifyUserEmail = async (
+  input: VerifyEmailSchemaInput,
+) => {
+  const user = await prisma.user.findUnique({
+    where: {
+      email: input.email,
+    },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      status: true,
+      emailVerifiedAt: true,
+      createdAt: true,
+    },
+  });
+
+  if (!user) {
+    throw new AppError(
+      "Invalid email or verification code",
+      400,
+    );
+  }
+
+  if (user.emailVerifiedAt) {
+    throw new AppError(
+      "Email address is already verified",
+      409,
+    );
+  }
+
+  const otpRecord = await prisma.oTP.findFirst({
+    where: {
+      userId: user.id,
+      verifiedAt: null,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  if (!otpRecord) {
+    throw new AppError(
+      "Verification code not found. Please request a new code",
+      400,
+    );
+  }
+
+  if (otpRecord.expiresAt <= new Date()) {
+    throw new AppError(
+      "Verification code has expired. Please request a new code",
+      400,
+    );
+  }
+
+  const MAX_OTP_ATTEMPTS = 5;
+
+  if (otpRecord.attempts >= MAX_OTP_ATTEMPTS) {
+    throw new AppError(
+      "Too many incorrect verification attempts. Please request a new code",
+      429,
+    );
+  }
+
+  const providedOtpHash = hashOtp(input.otp);
+
+  const otpMatches =
+    providedOtpHash === otpRecord.codeHash;
+
+  if (!otpMatches) {
+    const updatedOtp =
+      await prisma.oTP.updateMany({
+        where: {
+          id: otpRecord.id,
+          attempts: {
+            lt: MAX_OTP_ATTEMPTS,
+          },
+        },
+        data: {
+          attempts: {
+            increment: 1,
+          },
+        },
+      });
+
+    if (updatedOtp.count === 0) {
+      throw new AppError(
+        "Too many incorrect verification attempts. Please request a new code",
+        429,
+      );
+    }
+
+    throw new AppError(
+      "Invalid verification code",
+      400,
+    );
+  }
+
+  const verifiedAt = new Date();
+
+  await prisma.$transaction([
+    prisma.oTP.update({
+      where: {
+        id: otpRecord.id,
+      },
+      data: {
+        verifiedAt,
+      },
+    }),
+
+    prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        emailVerifiedAt: verifiedAt,
+      },
+    }),
+  ]);
+
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    role: user.role,
+    status: user.status,
+    emailVerifiedAt: verifiedAt,
+    createdAt: user.createdAt,
+  };
+};
+
+export const resendVerificationOtp = async (
+  input: ResendVerificationSchemaInput,
+): Promise<void> => {
+  const user = await prisma.user.findUnique({
+    where: {
+      email: input.email,
+    },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      emailVerifiedAt: true,
+    },
+  });
+
+  /*
+   * Do not reveal whether an email address
+   * exists in the system.
+   */
+  if (!user || user.emailVerifiedAt) {
+    return;
+  }
+
+  const now = new Date();
+
+  const latestOtp = await prisma.oTP.findFirst({
+    where: {
+      userId: user.id,
+      verifiedAt: null,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  /*
+   * Prevent OTP spam.
+   * A new OTP can only be requested
+   * once every 60 seconds.
+   */
+  if (latestOtp) {
+    const cooldownMs = 60 * 1000;
+    const elapsedMs =
+      now.getTime() -
+      latestOtp.createdAt.getTime();
+
+    if (elapsedMs < cooldownMs) {
+      throw new AppError(
+        "Please wait before requesting another verification code",
+        429,
+      );
+    }
+  }
+
+  const otp = generateOtp();
+  const otpHash = hashOtp(otp);
+
+  /*
+   * Invalidate previous unused OTPs
+   * and create the new OTP together.
+   */
+  await prisma.$transaction([
+    prisma.oTP.updateMany({
+      where: {
+        userId: user.id,
+        verifiedAt: null,
+      },
+      data: {
+        verifiedAt: now,
+      },
+    }),
+
+    prisma.oTP.create({
+      data: {
+        userId: user.id,
+        codeHash: otpHash,
+        expiresAt: getOtpExpiry(10),
+      },
+    }),
+  ]);
+
+  try {
+    await sendVerificationEmail(
+      user.email,
+      user.firstName,
+      otp,
+    );
+  } catch (error) {
+    console.error(
+      "Failed to send verification email:",
+      error,
+    );
+
+    throw new AppError(
+      "Unable to send verification email. Please try again later",
+      503,
+    );
+  }
+};
+
+export const forgotPassword = async (
+  input: ForgotPasswordSchemaInput,
+): Promise<void> => {
+  const user = await prisma.user.findUnique({
+    where: {
+      email: input.email,
+    },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      emailVerifiedAt: true,
+    },
+  });
+
+  /*
+   * Do not reveal whether the account exists.
+   */
+  if (!user) {
+    return;
+  }
+
+  /*
+   * Password reset should only be available
+   * to verified email accounts.
+   */
+  if (!user.emailVerifiedAt) {
+    return;
+  }
+
+  const now = new Date();
+
+  const latestOtp = await prisma.oTP.findFirst({
+    where: {
+      userId: user.id,
+      verifiedAt: null,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  /*
+   * 60-second cooldown.
+   */
+  if (latestOtp) {
+    const cooldownMs = 60 * 1000;
+
+    const elapsedMs =
+      now.getTime() -
+      latestOtp.createdAt.getTime();
+
+    if (elapsedMs < cooldownMs) {
+      throw new AppError(
+        "Please wait before requesting another password reset code",
+        429,
+      );
+    }
+  }
+
+  const otp = generateOtp();
+  const otpHash = hashOtp(otp);
+
+  await prisma.$transaction([
+    /*
+     * Invalidate previous unused OTPs.
+     */
+    prisma.oTP.updateMany({
+      where: {
+        userId: user.id,
+        verifiedAt: null,
+      },
+      data: {
+        verifiedAt: now,
+      },
+    }),
+
+    prisma.oTP.create({
+      data: {
+        userId: user.id,
+        codeHash: otpHash,
+        expiresAt: getOtpExpiry(10),
+      },
+    }),
+  ]);
+
+  try {
+    await sendPasswordResetEmail(
+      user.email,
+      user.firstName,
+      otp,
+    );
+  } catch (error) {
+    console.error(
+      "Failed to send password reset email:",
+      error,
+    );
+
+    throw new AppError(
+      "Unable to send password reset email. Please try again later",
+      503,
+    );
+  }
+};
+
+export const resetPassword = async (
+  input: ResetPasswordSchemaInput,
+): Promise<void> => {
+  const user = await prisma.user.findUnique({
+    where: {
+      email: input.email,
+    },
+    select: {
+      id: true,
+      emailVerifiedAt: true,
+    },
+  });
+
+  if (!user) {
+    throw new AppError(
+      "Invalid email or reset code",
+      400,
+    );
+  }
+
+  if (!user.emailVerifiedAt) {
+    throw new AppError(
+      "Please verify your email before resetting your password",
+      403,
+    );
+  }
+
+  const otpRecord = await prisma.oTP.findFirst({
+    where: {
+      userId: user.id,
+      verifiedAt: null,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  if (!otpRecord) {
+    throw new AppError(
+      "Password reset code not found. Please request a new code",
+      400,
+    );
+  }
+
+  if (otpRecord.expiresAt <= new Date()) {
+    throw new AppError(
+      "Password reset code has expired. Please request a new code",
+      400,
+    );
+  }
+
+  const MAX_OTP_ATTEMPTS = 5;
+
+  if (otpRecord.attempts >= MAX_OTP_ATTEMPTS) {
+    throw new AppError(
+      "Too many incorrect attempts. Please request a new code",
+      429,
+    );
+  }
+
+  const providedOtpHash = hashOtp(input.otp);
+
+  const otpMatches =
+    providedOtpHash === otpRecord.codeHash;
+
+  if (!otpMatches) {
+    const updatedOtp =
+      await prisma.oTP.updateMany({
+        where: {
+          id: otpRecord.id,
+          attempts: {
+            lt: MAX_OTP_ATTEMPTS,
+          },
+        },
+        data: {
+          attempts: {
+            increment: 1,
+          },
+        },
+      });
+
+    if (updatedOtp.count === 0) {
+      throw new AppError(
+        "Too many incorrect attempts. Please request a new code",
+        429,
+      );
+    }
+
+    throw new AppError(
+      "Invalid password reset code",
+      400,
+    );
+  }
+
+  const passwordHash =
+    await hashPassword(input.newPassword);
+
+  const now = new Date();
+
+  await prisma.$transaction([
+    /*
+     * Mark reset OTP as consumed.
+     */
+    prisma.oTP.update({
+      where: {
+        id: otpRecord.id,
+      },
+      data: {
+        verifiedAt: now,
+      },
+    }),
+
+    /*
+     * Update password.
+     */
+    prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        passwordHash,
+        passwordChangedAt: now,
+      },
+    }),
+
+    /*
+     * Revoke every existing refresh token.
+     *
+     * This logs the user out from other sessions.
+     */
+    prisma.refreshToken.updateMany({
+      where: {
+        userId: user.id,
+        revokedAt: null,
+      },
+      data: {
+        revokedAt: now,
+      },
+    }),
+  ]);
 };
