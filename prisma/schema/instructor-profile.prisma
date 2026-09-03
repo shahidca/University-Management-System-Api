@@ -1,7 +1,7 @@
 model InstructorProfile {
-  id             String   @id @default(uuid())
-  userId         String   @unique
-  employeeId     String   @unique
+  id             String    @id @default(uuid())
+  userId         String    @unique
+  employeeId     String    @unique
   firstName      String
   lastName       String
   phone          String?
@@ -11,15 +11,11 @@ model InstructorProfile {
   joiningDate    DateTime
   officeLocation String?
   bio            String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sections Section[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sections       Section[]
 
   @@index([employeeId])
   @@index([joiningDate])
-  @@index([designation])
-  @@index([specialization])
-  @@index([joiningDate, designation])
 }

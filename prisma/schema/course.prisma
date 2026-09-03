@@ -1,21 +1,20 @@
 model Course {
-  id           String     @id @default(uuid())
-  departmentId String
-  code         String     @unique
-  title        String
-  description  String?
-  credits      Decimal    @db.Decimal(4, 2)
-  courseType   CourseType @default(THEORY)
-  level        Int
-  isActive     Boolean    @default(true)
-  deletedAt    DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-
-  department      Department           @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  id              String               @id @default(uuid())
+  departmentId    String
+  code            String               @unique
+  title           String
+  description     String?
+  credits         Decimal              @db.Decimal(4, 2)
+  courseType      CourseType           @default(THEORY)
+  level           Int
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  deletedAt       DateTime?
+  department      Department           @relation(fields: [departmentId], references: [id])
+  offerings       CourseOffering[]
   prerequisites   CoursePrerequisite[] @relation("CoursePrerequisites")
   prerequisiteFor CoursePrerequisite[] @relation("PrerequisiteFor")
-  offerings       CourseOffering[]
 
   @@index([departmentId])
   @@index([title])
@@ -23,7 +22,4 @@ model Course {
   @@index([level])
   @@index([isActive])
   @@index([deletedAt])
-  @@index([isActive, deletedAt])
-  @@index([departmentId, isActive, deletedAt])
-  @@index([courseType, level])
 }

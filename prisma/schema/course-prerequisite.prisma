@@ -4,12 +4,10 @@ model CoursePrerequisite {
   prerequisiteId String
   minimumGrade   String?
   createdAt      DateTime @default(now())
-
-  course       Course @relation("CoursePrerequisites", fields: [courseId], references: [id], onDelete: Cascade)
-  prerequisite Course @relation("PrerequisiteFor", fields: [prerequisiteId], references: [id], onDelete: Restrict)
+  course         Course   @relation("CoursePrerequisites", fields: [courseId], references: [id], onDelete: Cascade)
+  prerequisite   Course   @relation("PrerequisiteFor", fields: [prerequisiteId], references: [id])
 
   @@unique([courseId, prerequisiteId])
   @@index([courseId])
   @@index([prerequisiteId])
-  @@index([courseId, prerequisiteId])
 }

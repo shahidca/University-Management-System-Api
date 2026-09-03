@@ -7,11 +7,15 @@ import { asyncHandler } from "../../utils/async-handler.js";
 import {
   getMe,
   login,
+  logout,
+  refresh,
   register,
 } from "./auth.controller.js";
 
 import {
   loginSchema,
+  logoutSchema,
+  refreshTokenSchema,
   registerSchema,
 } from "./auth.validation.js";
 
@@ -27,6 +31,18 @@ router.post(
   "/login",
   validate(loginSchema),
   asyncHandler(login),
+);
+
+router.post(
+  "/refresh",
+  validate(refreshTokenSchema),
+  asyncHandler(refresh),
+);
+
+router.post(
+  "/logout",
+  validate(logoutSchema),
+  asyncHandler(logout),
 );
 
 router.get(

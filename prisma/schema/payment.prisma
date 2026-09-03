@@ -15,8 +15,7 @@ model Payment {
   metadata             Json?
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
-
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  invoice              Invoice        @relation(fields: [invoiceId], references: [id])
 
   @@index([invoiceId])
   @@index([status])
@@ -24,6 +23,4 @@ model Payment {
   @@index([gatewayTransactionId])
   @@index([initiatedAt])
   @@index([completedAt])
-  @@index([invoiceId, status])
-  @@index([gateway, status])
 }

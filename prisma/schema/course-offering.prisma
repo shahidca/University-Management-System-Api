@@ -6,19 +6,14 @@ model CourseOffering {
   title      String
   credits    Decimal   @db.Decimal(4, 2)
   isActive   Boolean   @default(true)
-  deletedAt  DateTime?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
-
-  course   Course    @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  semester Semester  @relation(fields: [semesterId], references: [id], onDelete: Restrict)
-  sections Section[]
+  course     Course    @relation(fields: [courseId], references: [id])
+  semester   Semester  @relation(fields: [semesterId], references: [id])
+  sections   Section[]
 
   @@unique([courseId, semesterId])
   @@index([courseId])
   @@index([semesterId])
   @@index([isActive])
-  @@index([deletedAt])
-  @@index([isActive, deletedAt])
-  @@index([semesterId, isActive, deletedAt])
 }

@@ -5,11 +5,15 @@ import { sendSuccess } from "../../utils/api-response.js";
 import {
   getCurrentUser,
   loginUser,
+  logoutUser,
+  refreshUserToken,
   registerUser,
 } from "./auth.service.js";
 
 import type {
   LoginSchemaInput,
+  LogoutSchemaInput,
+  RefreshTokenSchemaInput,
   RegisterSchemaInput,
 } from "./auth.validation.js";
 
@@ -45,12 +49,46 @@ export const login = async (
   );
 };
 
+export const refresh = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await refreshUserToken(
+    req.body as RefreshTokenSchemaInput,
+  );
+
+  return sendSuccess(
+    res,
+    200,
+    "Access token refreshed successfully",
+    result,
+  );
+};
+
+export const logout = async (
+  req: Request,
+  res: Response,
+) => {
+  await logoutUser(
+    req.body as LogoutSchemaInput,
+  );
+
+  return sendSuccess(
+    res,
+    200,
+    "Logout successful",
+    null,
+  );
+};
+
 export const getMe = async (
   req: Request,
   res: Response,
 ) => {
   if (!req.user) {
-    throw new Error("Authenticated user context is missing");
+    throw new Error(
+      "Authenticated user context is missing",
+    );
   }
 
   const user = await getCurrentUser(

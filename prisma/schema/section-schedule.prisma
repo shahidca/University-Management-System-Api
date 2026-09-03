@@ -8,15 +8,11 @@ model SectionSchedule {
   building  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  section   Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
 
   @@unique([sectionId, dayOfWeek, startTime, endTime])
   @@index([sectionId])
   @@index([dayOfWeek])
   @@index([startTime])
   @@index([endTime])
-  @@index([room])
-  @@index([dayOfWeek, startTime, endTime])
-  @@index([room, dayOfWeek, startTime, endTime])
 }

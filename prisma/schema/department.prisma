@@ -7,13 +7,9 @@ model Department {
   deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  courses     Course[]
+  programs    Program[]
 
-  programs Program[]
-  courses  Course[]
-
-  @@index([code])
-  @@index([name])
   @@index([isActive])
   @@index([deletedAt])
-  @@index([isActive, deletedAt])
 }

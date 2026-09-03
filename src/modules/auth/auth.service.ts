@@ -2,15 +2,21 @@ import { randomUUID } from "node:crypto";
 
 import { prisma } from "../../config/database.js";
 import { AppError } from "../../utils/app-error.js";
-import { hashPassword, comparePassword } from "../../utils/password.js";
+import {
+  hashPassword,
+  comparePassword,
+} from "../../utils/password.js";
 import {
   generateAccessToken,
   generateRefreshToken,
+  verifyRefreshToken,
 } from "../../utils/jwt.js";
 import { hashToken } from "../../utils/token.js";
 
 import type {
   LoginSchemaInput,
+  LogoutSchemaInput,
+  RefreshTokenSchemaInput,
   RegisterSchemaInput,
 } from "./auth.validation.js";
 
@@ -33,7 +39,9 @@ export const registerUser = async (
     );
   }
 
-  const passwordHash = await hashPassword(input.password);
+  const passwordHash = await hashPassword(
+    input.password,
+  );
 
   const user = await prisma.user.create({
     data: {
@@ -114,23 +122,25 @@ export const loginUser = async (
 
   const refreshTokenHash = hashToken(refreshToken);
 
-  await prisma.refreshToken.create({
-    data: {
-      id: tokenId,
-      userId: user.id,
-      tokenHash: refreshTokenHash,
-      expiresAt: getRefreshTokenExpiry(),
-    },
-  });
+  await prisma.$transaction([
+    prisma.refreshToken.create({
+      data: {
+        id: tokenId,
+        userId: user.id,
+        tokenHash: refreshTokenHash,
+        expiresAt: getRefreshTokenExpiry(),
+      },
+    }),
 
-  await prisma.user.update({
-    where: {
-      id: user.id,
-    },
-    data: {
-      lastLoginAt: new Date(),
-    },
-  });
+    prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        lastLoginAt: new Date(),
+      },
+    }),
+  ]);
 
   return {
     user: {
@@ -154,6 +164,171 @@ const getRefreshTokenExpiry = (): Date => {
   );
 
   return expiresAt;
+};
+
+export const refreshUserToken = async (
+  input: RefreshTokenSchemaInput,
+) => {
+  let payload;
+
+  try {
+    payload = verifyRefreshToken(
+      input.refreshToken,
+    );
+  } catch {
+    throw new AppError(
+      "Invalid or expired refresh token",
+      401,
+    );
+  }
+
+  const storedToken =
+    await prisma.refreshToken.findUnique({
+      where: {
+        id: payload.tokenId,
+      },
+      include: {
+        user: true,
+      },
+    });
+
+  if (!storedToken) {
+    throw new AppError(
+      "Refresh token not found",
+      401,
+    );
+  }
+
+  if (storedToken.revokedAt) {
+    throw new AppError(
+      "Refresh token has been revoked",
+      401,
+    );
+  }
+
+  if (
+    storedToken.expiresAt <= new Date()
+  ) {
+    throw new AppError(
+      "Refresh token has expired",
+      401,
+    );
+  }
+
+  const tokenMatches = hashToken(
+    input.refreshToken,
+  ) === storedToken.tokenHash;
+
+  if (!tokenMatches) {
+    throw new AppError(
+      "Invalid refresh token",
+      401,
+    );
+  }
+
+  if (storedToken.user.status !== "ACTIVE") {
+    throw new AppError(
+      "Your account is not active",
+      403,
+    );
+  }
+
+  const newTokenId = randomUUID();
+
+  const newAccessToken =
+    generateAccessToken({
+      userId: storedToken.user.id,
+      role: storedToken.user.role,
+    });
+
+  const newRefreshToken =
+    generateRefreshToken({
+      userId: storedToken.user.id,
+      tokenId: newTokenId,
+    });
+
+  const newRefreshTokenHash =
+    hashToken(newRefreshToken);
+
+  await prisma.$transaction([
+    prisma.refreshToken.update({
+      where: {
+        id: storedToken.id,
+      },
+      data: {
+        revokedAt: new Date(),
+      },
+    }),
+
+    prisma.refreshToken.create({
+      data: {
+        id: newTokenId,
+        userId: storedToken.user.id,
+        tokenHash: newRefreshTokenHash,
+        expiresAt: getRefreshTokenExpiry(),
+      },
+    }),
+  ]);
+
+  return {
+    accessToken: newAccessToken,
+    refreshToken: newRefreshToken,
+  };
+};
+
+export const logoutUser = async (
+  input: LogoutSchemaInput,
+) => {
+  let payload;
+
+  try {
+    payload = verifyRefreshToken(
+      input.refreshToken,
+    );
+  } catch {
+    throw new AppError(
+      "Invalid or expired refresh token",
+      401,
+    );
+  }
+
+  const storedToken =
+    await prisma.refreshToken.findUnique({
+      where: {
+        id: payload.tokenId,
+      },
+    });
+
+  if (!storedToken) {
+    throw new AppError(
+      "Refresh token not found",
+      401,
+    );
+  }
+
+  if (storedToken.revokedAt) {
+    return;
+  }
+
+  const tokenMatches = hashToken(
+    input.refreshToken,
+  ) === storedToken.tokenHash;
+
+  if (!tokenMatches) {
+    throw new AppError(
+      "Invalid refresh token",
+      401,
+    );
+  }
+
+  await prisma.refreshToken.update({
+    where: {
+      id: storedToken.id,
+    },
+    data: {
+      revokedAt: new Date(),
+    },
+  });
 };
 
 export const getCurrentUser = async (

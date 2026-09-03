@@ -63,3 +63,26 @@ export const verifyAccessToken = (
     role: decoded.role,
   };
 };
+
+export const verifyRefreshToken = (
+  token: string,
+): RefreshTokenPayload => {
+  const decoded = jwt.verify(
+    token,
+    env.JWT_REFRESH_SECRET,
+  );
+
+  if (
+    typeof decoded !== "object" ||
+    decoded === null ||
+    typeof decoded.userId !== "string" ||
+    typeof decoded.tokenId !== "string"
+  ) {
+    throw new Error("Invalid refresh token payload");
+  }
+
+  return {
+    userId: decoded.userId,
+    tokenId: decoded.tokenId,
+  };
+};

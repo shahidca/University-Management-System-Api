@@ -1,27 +1,17 @@
 model User {
-  id                String     @id @default(uuid())
-  email             String     @unique
+  id                String             @id @default(uuid())
+  email             String             @unique
   passwordHash      String?
   firstName         String
   lastName          String
-  role              Role       @default(STUDENT)
-  status            UserStatus @default(ACTIVE)
-  emailVerifiedAt   DateTime?
-  lastLoginAt       DateTime?
-  passwordChangedAt DateTime?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
-
-  studentProfile    StudentProfile?
-  instructorProfile InstructorProfile?
+  role              Role               @default(STUDENT)
+  status            UserStatus         @default(ACTIVE)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   markedAttendance  Attendance[]       @relation("AttendanceMarkedBy")
+  auditLogs         AuditLog[]
+  instructorProfile InstructorProfile?
   notifications     Notification[]
   refreshTokens     RefreshToken[]
-  auditLogs         AuditLog[]
-
-  @@index([role])
-  @@index([status])
-  @@index([emailVerifiedAt])
-  @@index([lastLoginAt])
-  @@index([role, status])
+  studentProfile    StudentProfile?
 }

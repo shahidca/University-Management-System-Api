@@ -1,18 +1,15 @@
 model Enrollment {
-  id              String           @id @default(uuid())
-  studentId       String
-  sectionId       String
-  status          EnrollmentStatus @default(PENDING)
-  enrolledAt      DateTime?
-  droppedAt       DateTime?
-  completedAt     DateTime?
-  rejectionReason String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-
-  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  section    Section        @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  id         String           @id @default(uuid())
+  studentId  String
+  sectionId  String
+  status     EnrollmentStatus @default(PENDING)
+  enrolledAt DateTime?
+  droppedAt  DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
   attendance Attendance[]
+  section    Section          @relation(fields: [sectionId], references: [id])
+  student    StudentProfile   @relation(fields: [studentId], references: [id])
   results    Result[]
 
   @@unique([studentId, sectionId])
@@ -20,8 +17,4 @@ model Enrollment {
   @@index([sectionId])
   @@index([status])
   @@index([enrolledAt])
-  @@index([droppedAt])
-  @@index([completedAt])
-  @@index([studentId, status])
-  @@index([sectionId, status])
 }

@@ -7,16 +7,12 @@ model Attendance {
   markedById   String
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
-
-  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  markedBy   User       @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: Restrict)
+  enrollment   Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  markedBy     User             @relation("AttendanceMarkedBy", fields: [markedById], references: [id])
 
   @@unique([enrollmentId, date])
   @@index([enrollmentId])
   @@index([date])
   @@index([status])
   @@index([markedById])
-  @@index([enrollmentId, date, status])
-  @@index([markedById, date])
-  @@index([status, date])
 }

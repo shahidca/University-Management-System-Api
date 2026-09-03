@@ -12,16 +12,12 @@ model Result {
   publishedAt   DateTime?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
-
-  exam       Exam       @relation(fields: [examId], references: [id], onDelete: Restrict)
-  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  enrollment    Enrollment   @relation(fields: [enrollmentId], references: [id])
+  exam          Exam         @relation(fields: [examId], references: [id])
 
   @@unique([examId, enrollmentId])
   @@index([examId])
   @@index([enrollmentId])
   @@index([status])
   @@index([grade])
-  @@index([status, publishedAt])
-  @@index([enrollmentId, status])
-  @@index([examId, status])
 }
