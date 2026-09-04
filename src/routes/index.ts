@@ -3,6 +3,7 @@ import authRouter from "../modules/auth/auth.routes.js";
 import studentRouter from "../modules/student/student.routes.js";
 import departmentRouter from "../modules/departments/department.routes.js";
 import programRouter from "../modules/programs/program.routes.js";
+import academicYearRoutes from "../modules/academic-years/academic-year.routes.js";
 
 const router = Router();
 
@@ -26,6 +27,11 @@ router.use(
 router.use(
   "/programs",
   programRouter,
+);
+
+router.use(
+  "/academic-years",
+  academicYearRoutes,
 );
 
 export default router;
