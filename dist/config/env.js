@@ -24,6 +24,26 @@ const envSchema = z.object({
     JWT_REFRESH_EXPIRES_IN: z
         .string()
         .default("7d"),
+    SMTP_HOST: z
+        .string()
+        .min(1, "SMTP_HOST is required"),
+    SMTP_PORT: z.coerce
+        .number()
+        .int()
+        .positive()
+        .default(587),
+    SMTP_USER: z
+        .string()
+        .email("SMTP_USER must be a valid email address"),
+    SMTP_PASSWORD: z
+        .string()
+        .min(1, "SMTP_PASSWORD is required"),
+    SMTP_FROM: z
+        .string()
+        .min(1, "SMTP_FROM is required"),
+    GOOGLE_CLIENT_ID: z
+        .string()
+        .min(1, "Google Client ID is required"),
 });
 const parsedEnv = envSchema.safeParse(process.env);
 if (!parsedEnv.success) {
