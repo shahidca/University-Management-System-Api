@@ -13,6 +13,8 @@ import {
 } from "../../utils/jwt.js";
 import { hashToken } from "../../utils/token.js";
 
+
+import { verifyGoogleIdToken } from "./google.service.js";
 import type {
   LoginSchemaInput,
   LogoutSchemaInput,
@@ -891,4 +893,195 @@ export const resetPassword = async (
       },
     }),
   ]);
+};
+
+export const googleLogin = async (
+  idToken: string,
+) => {
+  const googleUser =
+    await verifyGoogleIdToken(idToken);
+
+  /*
+   * 1. First find an account already linked
+   *    to this Google account.
+   */
+  const existingGoogleUser =
+    await prisma.user.findUnique({
+      where: {
+        googleId: googleUser.googleId,
+      },
+    });
+
+  /*
+   * Existing Google account
+   */
+  if (existingGoogleUser) {
+    if (existingGoogleUser.status !== "ACTIVE") {
+      throw new AppError(
+        "Your account is not active",
+        403,
+      );
+    }
+
+    if (existingGoogleUser.role !== "STUDENT") {
+      throw new AppError(
+        "Google login is available only for student accounts",
+        403,
+      );
+    }
+
+    return createGoogleAuthSession(
+      existingGoogleUser.id,
+      existingGoogleUser.role,
+      existingGoogleUser.email,
+      existingGoogleUser.firstName,
+      existingGoogleUser.lastName,
+      existingGoogleUser.status,
+    );
+  }
+
+  /*
+   * 2. No Google account found.
+   *
+   * Check whether an account already exists
+   * with the verified Google email.
+   */
+  const existingEmailUser =
+    await prisma.user.findUnique({
+      where: {
+        email: googleUser.email,
+      },
+    });
+
+  /*
+   * Existing account with same email
+   */
+  if (existingEmailUser) {
+    if (existingEmailUser.status !== "ACTIVE") {
+      throw new AppError(
+        "Your account is not active",
+        403,
+      );
+    }
+
+    /*
+     * Google login is only allowed for students.
+     */
+    if (existingEmailUser.role !== "STUDENT") {
+      throw new AppError(
+        "Google login is available only for student accounts",
+        403,
+      );
+    }
+
+    /*
+     * Link the verified Google account to the
+     * existing student account.
+     */
+    const linkedUser =
+      await prisma.user.update({
+        where: {
+          id: existingEmailUser.id,
+        },
+        data: {
+          googleId: googleUser.googleId,
+          emailVerifiedAt:
+            existingEmailUser.emailVerifiedAt ??
+            new Date(),
+        },
+      });
+
+    return createGoogleAuthSession(
+      linkedUser.id,
+      linkedUser.role,
+      linkedUser.email,
+      linkedUser.firstName,
+      linkedUser.lastName,
+      linkedUser.status,
+    );
+  }
+
+  /*
+   * 3. No existing account.
+   *
+   * Google accounts can ONLY create STUDENT users.
+   */
+  const newUser = await prisma.user.create({
+    data: {
+      email: googleUser.email,
+      googleId: googleUser.googleId,
+      passwordHash: null,
+      firstName: googleUser.firstName,
+      lastName: googleUser.lastName,
+      role: "STUDENT",
+      status: "ACTIVE",
+      emailVerifiedAt: new Date(),
+    },
+  });
+
+  return createGoogleAuthSession(
+    newUser.id,
+    newUser.role,
+    newUser.email,
+    newUser.firstName,
+    newUser.lastName,
+    newUser.status,
+  );
+};
+
+export const createGoogleAuthSession = async (
+  userId: string,
+  role: "STUDENT" | "INSTRUCTOR" | "ADMIN",
+  email: string,
+  firstName: string,
+  lastName: string,
+  status: "ACTIVE" | "INACTIVE" | "SUSPENDED",
+) => {
+  const tokenId = randomUUID();
+
+  const accessToken = generateAccessToken({
+    userId,
+    role,
+  });
+
+  const refreshToken = generateRefreshToken({
+    userId,
+    tokenId,
+  });
+
+  const refreshTokenHash =
+    hashToken(refreshToken);
+
+  await prisma.$transaction([
+    prisma.refreshToken.create({
+      data: {
+        id: tokenId,
+        userId,
+        tokenHash: refreshTokenHash,
+        expiresAt: getRefreshTokenExpiry(),
+      },
+    }),
+
+    prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        lastLoginAt: new Date(),
+      },
+    }),
+  ]);
+
+  return {
+    user: {
+      id: userId,
+      email,
+      firstName,
+      lastName,
+      role,
+      status,
+    },
+    accessToken,
+    refreshToken,
+  };
 };

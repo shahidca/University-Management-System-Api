@@ -1,5 +1,8 @@
 import { Router } from "express";
 import authRouter from "../modules/auth/auth.routes.js";
+import studentRouter from "../modules/student/student.routes.js";
+import departmentRouter from "../modules/departments/department.routes.js";
+import programRouter from "../modules/programs/program.routes.js";
 
 const router = Router();
 
@@ -15,5 +18,14 @@ router.get("/", (_req, res) => {
 });
 
 router.use("/auth", authRouter);
+router.use("/students", studentRouter);
+router.use(
+  "/departments",
+  departmentRouter,
+);
+router.use(
+  "/programs",
+  programRouter,
+);
 
 export default router;

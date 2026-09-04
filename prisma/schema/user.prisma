@@ -4,6 +4,7 @@ model User {
   passwordHash      String?
   firstName         String
   lastName          String
+  googleId String? @unique
   role              Role               @default(STUDENT)
   status            UserStatus         @default(ACTIVE)
 

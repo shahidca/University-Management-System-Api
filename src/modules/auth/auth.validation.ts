@@ -102,6 +102,12 @@ export const resetPasswordSchema = z.object({
     ),
 });
 
+export const googleLoginSchema = z.object({
+  idToken: z
+    .string()
+    .min(1, "Google ID token is required"),
+});
+
 export type RegisterSchemaInput =
   z.infer<typeof registerSchema>;
 
@@ -125,3 +131,6 @@ export type LogoutSchemaInput =
 
 export type ResetPasswordSchemaInput =
   z.infer<typeof resetPasswordSchema>;
+
+  export type GoogleLoginSchemaInput =
+  z.infer<typeof googleLoginSchema>;

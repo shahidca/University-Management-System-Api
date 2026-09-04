@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 
 import { sendSuccess } from "../../utils/api-response.js";
-
+import { googleLogin } from "./auth.service.js";
 import {
   forgotPassword,
   getCurrentUser,
@@ -172,5 +172,21 @@ export const resetPasswordController = async (
     200,
     "Password reset successfully. Please log in again",
     null,
+  );
+};
+
+export const googleLoginController = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  const result = await googleLogin(
+    req.body.idToken,
+  );
+
+  sendSuccess(
+    res,
+    200,
+    "Google login successful",
+    result,
   );
 };

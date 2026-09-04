@@ -3,7 +3,13 @@ import { Router } from "express";
 import { authenticate } from "../../middlewares/auth.middleware.js";
 import { validate } from "../../middlewares/validation.middleware.js";
 import { asyncHandler } from "../../utils/async-handler.js";
+import {
+  googleLoginController,
+} from "./auth.controller.js";
 
+import {
+  googleLoginSchema,
+} from "./auth.validation.js";
 import {
   forgotPasswordController,
   getMe,
@@ -51,6 +57,12 @@ router.post(
   "/login",
   validate(loginSchema),
   asyncHandler(login),
+);
+
+router.post(
+  "/google",
+  validate(googleLoginSchema),
+  asyncHandler(googleLoginController),
 );
 
 

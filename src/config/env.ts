@@ -60,6 +60,11 @@ const envSchema = z.object({
   SMTP_FROM: z
     .string()
     .min(1, "SMTP_FROM is required"),
+
+  GOOGLE_CLIENT_ID: z
+  .string()
+  .min(1, "Google Client ID is required"),
+    
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
