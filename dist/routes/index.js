@@ -7,6 +7,7 @@ import academicYearRoutes from "../modules/academic-years/academic-year.routes.j
 import semesterRoutes from "../modules/semesters/semester.routes.js";
 import courseRoutes from "../modules/courses/course.routes.js";
 import coursePrerequisiteRoutes from "../modules/course-prerequisite/course-prerequisite.routes.js";
+import courseOfferingRoutes from "../modules/course-offerings/course-offering.routes.js";
 const router = Router();
 router.get("/", (_req, res) => {
     res.status(200).json({
@@ -26,5 +27,6 @@ router.use("/academic-years", academicYearRoutes);
 router.use("/semesters", semesterRoutes);
 router.use("/courses", courseRoutes);
 router.use("/course-prerequisites", coursePrerequisiteRoutes);
+router.use("/course-offerings", courseOfferingRoutes);
 export default router;
 //# sourceMappingURL=index.js.map
