@@ -8,6 +8,7 @@ import semesterRoutes from "../modules/semesters/semester.routes.js";
 import courseRoutes from "../modules/courses/course.routes.js";
 import coursePrerequisiteRoutes from "../modules/course-prerequisite/course-prerequisite.routes.js";
 import courseOfferingRoutes from "../modules/course-offerings/course-offering.routes.js";
+import sectionRoutes from "../modules/sections/section.routes.js";
 
 const router = Router();
 
@@ -56,6 +57,11 @@ router.use(
 router.use(
   "/course-offerings",
   courseOfferingRoutes,
+);
+
+router.use(
+  "/sections",
+  sectionRoutes,
 );
 
 export default router;

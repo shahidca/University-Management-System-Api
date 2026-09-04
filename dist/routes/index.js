@@ -8,6 +8,7 @@ import semesterRoutes from "../modules/semesters/semester.routes.js";
 import courseRoutes from "../modules/courses/course.routes.js";
 import coursePrerequisiteRoutes from "../modules/course-prerequisite/course-prerequisite.routes.js";
 import courseOfferingRoutes from "../modules/course-offerings/course-offering.routes.js";
+import sectionRoutes from "../modules/sections/section.routes.js";
 const router = Router();
 router.get("/", (_req, res) => {
     res.status(200).json({
@@ -28,5 +29,6 @@ router.use("/semesters", semesterRoutes);
 router.use("/courses", courseRoutes);
 router.use("/course-prerequisites", coursePrerequisiteRoutes);
 router.use("/course-offerings", courseOfferingRoutes);
+router.use("/sections", sectionRoutes);
 export default router;
 //# sourceMappingURL=index.js.map
