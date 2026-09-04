@@ -5,6 +5,7 @@ import departmentRouter from "../modules/departments/department.routes.js";
 import programRouter from "../modules/programs/program.routes.js";
 import academicYearRoutes from "../modules/academic-years/academic-year.routes.js";
 import semesterRoutes from "../modules/semesters/semester.routes.js";
+import courseRoutes from "../modules/courses/course.routes.js";
 
 const router = Router();
 
@@ -38,6 +39,11 @@ router.use(
 router.use(
   "/semesters",
   semesterRoutes,
+);
+
+router.use(
+  "/courses",
+  courseRoutes,
 );
 
 export default router;
