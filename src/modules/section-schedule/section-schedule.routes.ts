@@ -9,6 +9,10 @@ import {
 } from "../../middlewares/rbac.middleware.js";
 
 import {
+  validateRequest,
+} from "../../middlewares/validation.middleware.js";
+
+import {
   validate,
 } from "../../middlewares/validation.middleware.js";
 
@@ -22,6 +26,7 @@ import {
 
 import {
   createSectionScheduleSchema,
+  sectionScheduleListQuerySchema,
   updateSectionScheduleSchema,
 } from "./section-schedule.validation.js";
 
@@ -29,6 +34,10 @@ const router = Router();
 
 router.get(
   "/",
+  validateRequest({
+    query:
+      sectionScheduleListQuerySchema,
+  }),
   getSectionSchedulesController,
 );
 
