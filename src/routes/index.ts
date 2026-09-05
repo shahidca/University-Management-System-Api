@@ -10,6 +10,8 @@ import coursePrerequisiteRoutes from "../modules/course-prerequisite/course-prer
 import courseOfferingRoutes from "../modules/course-offerings/course-offering.routes.js";
 import sectionRoutes from "../modules/sections/section.routes.js";
 import sectionScheduleRoutes from "../modules/section-schedule/section-schedule.routes.js";
+import enrollmentRoutes from "../modules/enrollments/enrollment.routes.js";
+import attendanceRouter from "../modules/attendance/attendance.routes.js";
 
 const router = Router();
 
@@ -68,6 +70,16 @@ router.use(
 router.use(
   "/section-schedules",
   sectionScheduleRoutes,
+);
+
+router.use(
+  "/enrollments",
+  enrollmentRoutes,
+);
+
+router.use(
+  "/attendances",
+  attendanceRouter,
 );
 
 export default router;
