@@ -11,6 +11,8 @@ import courseOfferingRoutes from "../modules/course-offerings/course-offering.ro
 import sectionRoutes from "../modules/sections/section.routes.js";
 import sectionScheduleRoutes from "../modules/section-schedule/section-schedule.routes.js";
 import enrollmentRoutes from "../modules/enrollments/enrollment.routes.js";
+import attendanceRouter from "../modules/attendance/attendance.routes.js";
+import examRouter from "../modules/exams/exam.routes.js";
 const router = Router();
 router.get("/", (_req, res) => {
     res.status(200).json({
@@ -34,5 +36,7 @@ router.use("/course-offerings", courseOfferingRoutes);
 router.use("/sections", sectionRoutes);
 router.use("/section-schedules", sectionScheduleRoutes);
 router.use("/enrollments", enrollmentRoutes);
+router.use("/attendances", attendanceRouter);
+router.use("/exams", examRouter);
 export default router;
 //# sourceMappingURL=index.js.map

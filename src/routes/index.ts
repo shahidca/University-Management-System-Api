@@ -12,6 +12,8 @@ import sectionRoutes from "../modules/sections/section.routes.js";
 import sectionScheduleRoutes from "../modules/section-schedule/section-schedule.routes.js";
 import enrollmentRoutes from "../modules/enrollments/enrollment.routes.js";
 import attendanceRouter from "../modules/attendance/attendance.routes.js";
+import examRouter from "../modules/exams/exam.routes.js";
+import resultRouter from "../modules/results/result.routes.js";
 
 const router = Router();
 
@@ -80,6 +82,16 @@ router.use(
 router.use(
   "/attendances",
   attendanceRouter,
+);
+
+router.use(
+  "/exams",
+  examRouter,
+);
+
+router.use(
+  "/results",
+  resultRouter,
 );
 
 export default router;
