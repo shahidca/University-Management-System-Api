@@ -4,7 +4,12 @@ import { authenticate } from "../../middlewares/auth.middleware.js";
 import { requireRole } from "../../middlewares/rbac.middleware.js";
 import { validateRequest } from "../../middlewares/validation.middleware.js";
 import { asyncHandler } from "../../utils/async-handler.js";
-
+import {
+  getMyCgpaController,
+} from "./result.controller.js";
+import {
+  getMySemesterGpaController,
+} from "./result.controller.js";
 import {
   approveResultController,
   createResultController,
@@ -125,6 +130,24 @@ router.patch(
   requireRole("ADMIN"),
   asyncHandler(
     publishResultController,
+  ),
+);
+
+router.get(
+  "/my/semester/:semesterId/gpa",
+  authenticate,
+  requireRole("STUDENT"),
+  asyncHandler(
+    getMySemesterGpaController,
+  ),
+);
+
+router.get(
+  "/my/cgpa",
+  authenticate,
+  requireRole("STUDENT"),
+  asyncHandler(
+    getMyCgpaController,
   ),
 );
 

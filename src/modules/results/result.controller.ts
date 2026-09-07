@@ -1,7 +1,10 @@
 import type { Request, Response } from "express";
 
 import { sendSuccess } from "../../utils/api-response.js";
-
+import {
+  getStudentCgpa,
+  getStudentSemesterGpa,
+} from "./result.service.js";
 import {
   approveResult,
   createResult,
@@ -40,6 +43,8 @@ export const getResultsController = async (
   res: Response,
 ) => {
   const result = await getResults(
+    req.user!.userId,
+    req.user!.role,
     req.query as unknown as ResultListQueryInput,
   );
 
@@ -56,6 +61,8 @@ export const getResultByIdController = async (
   res: Response,
 ) => {
   const result = await getResultById(
+    req.user!.userId,
+    req.user!.role,
     req.params.id as string,
   );
 
@@ -133,3 +140,40 @@ export const publishResultController = async (
     result,
   );
 };
+
+export const getMySemesterGpaController =
+  async (
+    req: Request,
+    res: Response,
+  ) => {
+    const result =
+      await getStudentSemesterGpa(
+        req.user!.userId,
+        req.params.semesterId as string,
+      );
+
+    return sendSuccess(
+      res,
+      200,
+      "Semester GPA calculated successfully",
+      result,
+    );
+  };
+
+  export const getMyCgpaController =
+  async (
+    req: Request,
+    res: Response,
+  ) => {
+    const result =
+      await getStudentCgpa(
+        req.user!.userId,
+      );
+
+    return sendSuccess(
+      res,
+      200,
+      "CGPA calculated successfully",
+      result,
+    );
+  };
