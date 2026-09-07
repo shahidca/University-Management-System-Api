@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { calculateCgpa, calculateGpa, } from "./result.gpa.js";
 import { prisma } from "../../config/database.js";
 import { AppError } from "../../utils/app-error.js";
 const resultSelect = {
@@ -357,11 +358,37 @@ export const createResult = async (userId, input) => {
         throw error;
     }
 };
-export const getResultById = async (resultId) => {
-    const result = await prisma.result.findUnique({
-        where: {
-            id: resultId,
-        },
+export const getResultById = async (userId, role, id) => {
+    const where = {
+        id,
+    };
+    /**
+     * Students can only access
+     * their own published result.
+     */
+    if (role === "STUDENT") {
+        where.status = "PUBLISHED";
+        where.enrollment = {
+            student: {
+                userId,
+            },
+        };
+    }
+    /**
+     * Instructors can only access
+     * results from their own sections.
+     */
+    if (role === "INSTRUCTOR") {
+        where.enrollment = {
+            section: {
+                instructor: {
+                    userId,
+                },
+            },
+        };
+    }
+    const result = await prisma.result.findFirst({
+        where,
         select: resultSelect,
     });
     if (!result) {
@@ -369,9 +396,33 @@ export const getResultById = async (resultId) => {
     }
     return result;
 };
-export const getResults = async (query) => {
+export const getResults = async (userId, role, query) => {
     const { page, limit, examId, enrollmentId, studentId, sectionId, status, grade, search, sortBy, sortOrder, } = query;
     const skip = (page - 1) * limit;
+    const enrollmentWhere = {
+        ...(studentId
+            ? {
+                studentId,
+            }
+            : {}),
+        ...(sectionId
+            ? {
+                sectionId,
+            }
+            : {}),
+    };
+    if (role === "STUDENT") {
+        enrollmentWhere.student = {
+            userId,
+        };
+    }
+    if (role === "INSTRUCTOR") {
+        enrollmentWhere.section = {
+            instructor: {
+                userId,
+            },
+        };
+    }
     const where = {
         ...(examId
             ? {
@@ -383,20 +434,9 @@ export const getResults = async (query) => {
                 enrollmentId,
             }
             : {}),
-        ...(studentId || sectionId
+        ...(Object.keys(enrollmentWhere).length > 0
             ? {
-                enrollment: {
-                    ...(studentId
-                        ? {
-                            studentId,
-                        }
-                        : {}),
-                    ...(sectionId
-                        ? {
-                            sectionId,
-                        }
-                        : {}),
-                },
+                enrollment: enrollmentWhere,
             }
             : {}),
         ...(status
@@ -451,6 +491,14 @@ export const getResults = async (query) => {
             }
             : {}),
     };
+    /*
+     * Students can only see published results.
+     * This must override any status supplied
+     * through the query string.
+     */
+    if (role === "STUDENT") {
+        where.status = "PUBLISHED";
+    }
     const [results, total] = await prisma.$transaction([
         prisma.result.findMany({
             where,
@@ -790,5 +838,181 @@ export const publishResult = async (resultId) => {
         },
         select: resultSelect,
     });
+};
+export const getStudentSemesterGpa = async (userId, semesterId) => {
+    const student = await prisma.studentProfile.findUnique({
+        where: {
+            userId,
+        },
+        select: {
+            id: true,
+            studentId: true,
+            firstName: true,
+            lastName: true,
+        },
+    });
+    if (!student) {
+        throw new AppError("Student profile not found", 404);
+    }
+    const semester = await prisma.semester.findUnique({
+        where: {
+            id: semesterId,
+        },
+        select: {
+            id: true,
+            name: true,
+            code: true,
+        },
+    });
+    if (!semester) {
+        throw new AppError("Semester not found", 404);
+    }
+    const results = await prisma.result.findMany({
+        where: {
+            status: "PUBLISHED",
+            enrollment: {
+                studentId: student.id,
+                section: {
+                    courseOffering: {
+                        semesterId,
+                    },
+                },
+            },
+        },
+        select: {
+            grade: true,
+            gradePoint: true,
+            enrollment: {
+                select: {
+                    section: {
+                        select: {
+                            courseOffering: {
+                                select: {
+                                    credits: true,
+                                    course: {
+                                        select: {
+                                            id: true,
+                                            code: true,
+                                            title: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    });
+    if (results.length === 0) {
+        throw new AppError("No published results found for this semester", 404);
+    }
+    const courses = results.map((result) => {
+        const course = result.enrollment.section
+            .courseOffering.course;
+        const credits = Number(result.enrollment.section
+            .courseOffering.credits);
+        const gradePoint = Number(result.gradePoint ?? 0);
+        return {
+            courseId: course.id,
+            courseCode: course.code,
+            courseTitle: course.title,
+            credits,
+            grade: result.grade ?? "N/A",
+            gradePoint,
+        };
+    });
+    const calculation = calculateGpa(courses);
+    return {
+        student: {
+            id: student.id,
+            studentId: student.studentId,
+            firstName: student.firstName,
+            lastName: student.lastName,
+        },
+        semester,
+        ...calculation,
+    };
+};
+export const getStudentCgpa = async (userId) => {
+    const student = await prisma.studentProfile.findUnique({
+        where: {
+            userId,
+        },
+        select: {
+            id: true,
+            studentId: true,
+            firstName: true,
+            lastName: true,
+        },
+    });
+    if (!student) {
+        throw new AppError("Student profile not found", 404);
+    }
+    const results = await prisma.result.findMany({
+        where: {
+            status: "PUBLISHED",
+            enrollment: {
+                studentId: student.id,
+            },
+        },
+        select: {
+            grade: true,
+            gradePoint: true,
+            enrollment: {
+                select: {
+                    section: {
+                        select: {
+                            courseOffering: {
+                                select: {
+                                    credits: true,
+                                    course: {
+                                        select: {
+                                            id: true,
+                                            code: true,
+                                            title: true,
+                                        },
+                                    },
+                                    semester: {
+                                        select: {
+                                            id: true,
+                                            name: true,
+                                            code: true,
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    });
+    if (results.length === 0) {
+        throw new AppError("No published results found for CGPA calculation", 404);
+    }
+    const courses = results.map((result) => {
+        const course = result.enrollment.section
+            .courseOffering.course;
+        return {
+            courseId: course.id,
+            courseCode: course.code,
+            courseTitle: course.title,
+            credits: Number(result.enrollment.section
+                .courseOffering.credits),
+            grade: result.grade ?? "N/A",
+            gradePoint: Number(result.gradePoint ?? 0),
+        };
+    });
+    const calculation = calculateCgpa(courses);
+    return {
+        student: {
+            id: student.id,
+            studentId: student.studentId,
+            firstName: student.firstName,
+            lastName: student.lastName,
+        },
+        ...calculation,
+    };
 };
 //# sourceMappingURL=result.service.js.map
