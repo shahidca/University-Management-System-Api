@@ -14,6 +14,7 @@ import enrollmentRoutes from "../modules/enrollments/enrollment.routes.js";
 import attendanceRouter from "../modules/attendance/attendance.routes.js";
 import examRouter from "../modules/exams/exam.routes.js";
 import resultRouter from "../modules/results/result.routes.js";
+import transcriptRouter from "../modules/transcripts/transcript.routes.js";
 
 const router = Router();
 
@@ -92,6 +93,11 @@ router.use(
 router.use(
   "/results",
   resultRouter,
+);
+
+router.use(
+  "/transcripts",
+  transcriptRouter,
 );
 
 export default router;

@@ -272,16 +272,19 @@ export const getTranscriptById =
     role: Role,
     id: string,
   ) => {
-    const where: Prisma.TranscriptWhereInput =
-      {
-        id,
-      };
+    const where: Prisma.TranscriptWhereInput = {
+      id,
+    };
 
     if (role === "STUDENT") {
       const student =
         await getStudentByUserId(userId);
 
       where.studentId = student.id;
+
+      where.status = {
+        not: "REVOKED",
+      };
     }
 
     const transcript =
@@ -374,3 +377,144 @@ export const getTranscripts =
       },
     };
   };
+
+  export const approveTranscript = async (
+  id: string,
+) => {
+  const transcript =
+    await prisma.transcript.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        id: true,
+        status: true,
+        transcriptNo: true,
+      },
+    });
+
+  if (!transcript) {
+    throw new AppError(
+      "Transcript not found",
+      404,
+    );
+  }
+
+  if (transcript.status !== "GENERATED") {
+    throw new AppError(
+      `Transcript cannot be approved from ${transcript.status} status`,
+      400,
+    );
+  }
+
+  const approvedAt = new Date();
+
+  return prisma.transcript.update({
+    where: {
+      id,
+    },
+    data: {
+      status: "APPROVED",
+      approvedAt,
+    },
+    select: transcriptSelect,
+  });
+};
+
+export const issueTranscript = async (
+  id: string,
+) => {
+  const transcript =
+    await prisma.transcript.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        id: true,
+        status: true,
+        transcriptNo: true,
+      },
+    });
+
+  if (!transcript) {
+    throw new AppError(
+      "Transcript not found",
+      404,
+    );
+  }
+
+  if (transcript.status !== "APPROVED") {
+    throw new AppError(
+      `Transcript cannot be issued from ${transcript.status} status`,
+      400,
+    );
+  }
+
+  return prisma.transcript.update({
+    where: {
+      id,
+    },
+    data: {
+      status: "ISSUED",
+      issuedAt: new Date(),
+    },
+    select: transcriptSelect,
+  });
+};
+
+export const getMyIssuedTranscripts =
+  async (userId: string) => {
+    const student =
+      await getStudentByUserId(userId);
+
+    return prisma.transcript.findMany({
+      where: {
+        studentId: student.id,
+        status: "ISSUED",
+      },
+      orderBy: {
+        issuedAt: "desc",
+      },
+      select: transcriptSelect,
+    });
+  };
+
+export const revokeTranscript = async (
+  id: string,
+) => {
+  const transcript =
+    await prisma.transcript.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        id: true,
+        status: true,
+        transcriptNo: true,
+      },
+    });
+
+  if (!transcript) {
+    throw new AppError(
+      "Transcript not found",
+      404,
+    );
+  }
+
+  if (transcript.status !== "ISSUED") {
+    throw new AppError(
+      `Transcript cannot be revoked from ${transcript.status} status`,
+      400,
+    );
+  }
+
+  return prisma.transcript.update({
+    where: {
+      id,
+    },
+    data: {
+      status: "REVOKED",
+    },
+    select: transcriptSelect,
+  });
+};
