@@ -518,3 +518,82 @@ export const revokeTranscript = async (
     select: transcriptSelect,
   });
 };
+
+export const getStudentTranscripts = async (
+  studentId: string,
+  query: TranscriptListQueryInput,
+) => {
+  const student =
+    await prisma.studentProfile.findUnique({
+      where: {
+        id: studentId,
+      },
+      select: {
+        id: true,
+        studentId: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+  if (!student) {
+    throw new AppError(
+      "Student profile not found",
+      404,
+    );
+  }
+
+  const {
+    page,
+    limit,
+    semesterId,
+    status,
+    sortOrder,
+  } = query;
+
+  const skip = (page - 1) * limit;
+
+  const where: Prisma.TranscriptWhereInput = {
+    studentId,
+    ...(semesterId
+      ? {
+          semesterId,
+        }
+      : {}),
+    ...(status
+      ? {
+          status,
+        }
+      : {}),
+  };
+
+  const [items, total] =
+    await prisma.$transaction([
+      prisma.transcript.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: {
+          createdAt: sortOrder,
+        },
+        select: transcriptSelect,
+      }),
+
+      prisma.transcript.count({
+        where,
+      }),
+    ]);
+
+  return {
+    student,
+    items,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(
+        total / limit,
+      ),
+    },
+  };
+};

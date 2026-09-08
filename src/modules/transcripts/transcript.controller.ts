@@ -25,6 +25,11 @@ import {
   getStudentCourseHistory,
 } from "./transcript.course-history.js";
 
+import {
+  getStudentTranscripts,
+} from "./transcript.service.js";
+
+
 export const generateSemesterTranscriptController =
   asyncHandler(
     async (
@@ -209,3 +214,19 @@ export const getTranscriptsController =
       );
     },
   );
+
+  export const getStudentTranscriptsController =
+  asyncHandler(async (req, res) => {
+    const result =
+      await getStudentTranscripts(
+        req.params.studentId,
+        req.query as TranscriptListQueryInput,
+      );
+
+    return sendSuccess(
+      res,
+      200,
+      "Student transcripts retrieved successfully",
+      result,
+    );
+  });

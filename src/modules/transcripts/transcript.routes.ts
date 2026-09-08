@@ -10,6 +10,7 @@ import {
   getMyIssuedTranscriptsController,
   getStudentAcademicHistoryController,
   getStudentCourseHistoryController,
+  getStudentTranscriptsController,
   getTranscriptByIdController,
   getTranscriptsController,
   issueTranscriptController,
@@ -20,6 +21,7 @@ import {
   transcriptIdParamsSchema,
   transcriptListQuerySchema,
   transcriptSemesterParamsSchema,
+  transcriptStudentParamsSchema,
 } from "./transcript.validation.js";
 
 
@@ -29,6 +31,7 @@ router.use(authenticate);
 
 router.get(
   "/",
+  authorize("STUDENT", "ADMIN"),
   validateRequest({
     query: transcriptListQuerySchema,
   }),
@@ -37,6 +40,7 @@ router.get(
 
 router.get(
   "/:id",
+  authorize("STUDENT", "ADMIN"),
   validateRequest({
     params: transcriptIdParamsSchema,
   }),
@@ -95,6 +99,16 @@ router.get(
   "/my/course-history",
   authorize("STUDENT"),
   getStudentCourseHistoryController,
+);
+
+router.get(
+  "/student/:studentId",
+  authorize("ADMIN"),
+  validateRequest({
+    params: transcriptStudentParamsSchema,
+    query: transcriptListQuerySchema,
+  }),
+  getStudentTranscriptsController,
 );
 
 
