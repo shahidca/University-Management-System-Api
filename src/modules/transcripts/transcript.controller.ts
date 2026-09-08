@@ -215,12 +215,18 @@ export const getTranscriptsController =
     },
   );
 
-  export const getStudentTranscriptsController =
+ export const getStudentTranscriptsController =
   asyncHandler(async (req, res) => {
+    const studentId =
+      req.params.studentId as string;
+
+    const query =
+      req.query as unknown as TranscriptListQueryInput;
+
     const result =
       await getStudentTranscripts(
-        req.params.studentId,
-        req.query as TranscriptListQueryInput,
+        studentId,
+        query,
       );
 
     return sendSuccess(

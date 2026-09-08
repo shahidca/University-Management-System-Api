@@ -4,7 +4,6 @@ import type { Role } from "@prisma/client";
 import { prisma } from "../../config/database.js";
 import { AppError } from "../../utils/app-error.js";
 import {
-  calculateCgpa,
   calculateGpa,
   type GpaCourseResult,
 } from "../results/result.gpa.js";
@@ -34,6 +33,7 @@ const transcriptSelect =
         studentId: true,
         firstName: true,
         lastName: true,
+
         program: {
           select: {
             id: true,
@@ -61,7 +61,9 @@ const transcriptSelect =
 const generateTranscriptNumber =
   (): string => {
     const timestamp =
-      Date.now().toString(36).toUpperCase();
+      Date.now()
+        .toString(36)
+        .toUpperCase();
 
     const random =
       Math.random()
@@ -80,6 +82,7 @@ const getStudentByUserId = async (
       where: {
         userId,
       },
+
       select: {
         id: true,
         studentId: true,
@@ -111,12 +114,12 @@ const getPublishedResults = async (
 
         ...(semesterId
           ? {
-              section: {
-                courseOffering: {
-                  semesterId,
-                },
+            section: {
+              courseOffering: {
+                semesterId,
               },
-            }
+            },
+          }
           : {}),
       },
     },
@@ -164,11 +167,15 @@ const mapResultsToCourses = (
       courseId: course.id,
       courseCode: course.code,
       courseTitle: course.title,
+
       credits: Number(
         result.enrollment.section
           .courseOffering.credits,
       ),
-      grade: result.grade ?? "N/A",
+
+      grade:
+        result.grade ?? "N/A",
+
       gradePoint: Number(
         result.gradePoint ?? 0,
       ),
@@ -189,6 +196,7 @@ export const generateSemesterTranscript =
         where: {
           id: semesterId,
         },
+
         select: {
           id: true,
           name: true,
@@ -210,6 +218,7 @@ export const generateSemesterTranscript =
           studentId: student.id,
           semesterId,
         },
+
         select: {
           id: true,
           status: true,
@@ -249,17 +258,22 @@ export const generateSemesterTranscript =
         data: {
           studentId: student.id,
           semesterId,
+
           transcriptNo:
             generateTranscriptNumber(),
+
           status: "GENERATED",
+
           semesterGpa:
             calculation.gpa,
+
           cumulativeGpa:
             calculation.gpa,
+
           totalCredits:
             calculation.totalCredits,
-          generatedAt: undefined,
         },
+
         select: transcriptSelect,
       });
 
@@ -272,7 +286,8 @@ export const getTranscriptById =
     role: Role,
     id: string,
   ) => {
-    const where: Prisma.TranscriptWhereInput = {
+    const where: Prisma.TranscriptWhereInput =
+    {
       id,
     };
 
@@ -290,6 +305,7 @@ export const getTranscriptById =
     const transcript =
       await prisma.transcript.findFirst({
         where,
+
         select: transcriptSelect,
       });
 
@@ -318,34 +334,50 @@ export const getTranscripts =
       sortOrder,
     } = query;
 
-    const skip = (page - 1) * limit;
+    const skip =
+      (page - 1) * limit;
 
     const where: Prisma.TranscriptWhereInput =
-      {
-        ...(studentId
-          ? {
-              studentId,
-            }
-          : {}),
+    {
+      ...(studentId
+        ? {
+          studentId,
+        }
+        : {}),
 
-        ...(semesterId
-          ? {
-              semesterId,
-            }
-          : {}),
+      ...(semesterId
+        ? {
+          semesterId,
+        }
+        : {}),
 
-        ...(status
-          ? {
-              status,
-            }
-          : {}),
-      };
+      ...(status
+        ? {
+          status,
+        }
+        : {}),
+    };
 
     if (role === "STUDENT") {
       const student =
         await getStudentByUserId(userId);
 
       where.studentId = student.id;
+
+      if (status === "REVOKED") {
+        throw new AppError(
+          "Students cannot access revoked transcripts",
+          403,
+        );
+      }
+
+      if (status) {
+        where.status = status;
+      } else {
+        where.status = {
+          not: "REVOKED",
+        };
+      }
     }
 
     const [items, total] =
@@ -354,9 +386,11 @@ export const getTranscripts =
           where,
           skip,
           take: limit,
+
           orderBy: {
             createdAt: sortOrder,
           },
+
           select: transcriptSelect,
         }),
 
@@ -367,10 +401,12 @@ export const getTranscripts =
 
     return {
       items,
+
       pagination: {
         page,
         limit,
         total,
+
         totalPages: Math.ceil(
           total / limit,
         ),
@@ -378,92 +414,209 @@ export const getTranscripts =
     };
   };
 
-  export const approveTranscript = async (
+
+export const approveTranscript = async (
   id: string,
+  actorId: string,
+  ipAddress?: string,
+  userAgent?: string,
 ) => {
-  const transcript =
-    await prisma.transcript.findUnique({
-      where: {
-        id,
-      },
-      select: {
-        id: true,
-        status: true,
-        transcriptNo: true,
+  return prisma.$transaction(async (tx) => {
+    const transcript =
+      await tx.transcript.findUnique({
+        where: {
+          id,
+        },
+        select: {
+          id: true,
+          status: true,
+          transcriptNo: true,
+        },
+      });
+
+    if (!transcript) {
+      throw new AppError(
+        "Transcript not found",
+        404,
+      );
+    }
+
+    if (transcript.status !== "GENERATED") {
+      throw new AppError(
+        `Transcript cannot be approved from ${transcript.status} status`,
+        400,
+      );
+    }
+
+    const approvedAt = new Date();
+
+    const updatedTranscript =
+      await tx.transcript.updateMany({
+        where: {
+          id,
+          status: "GENERATED",
+        },
+        data: {
+          status: "APPROVED",
+          approvedAt,
+        },
+      });
+
+    if (updatedTranscript.count !== 1) {
+      throw new AppError(
+        "Transcript approval failed because its status changed",
+        409,
+      );
+    }
+
+    const transcriptAfter =
+      await tx.transcript.findUnique({
+        where: {
+          id,
+        },
+        select: transcriptSelect,
+      });
+
+    if (!transcriptAfter) {
+      throw new AppError(
+        "Transcript not found after approval",
+        404,
+      );
+    }
+
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        action: "TRANSCRIPT_APPROVED",
+        entity: "Transcript",
+        entityId: transcript.id,
+
+        oldValue: {
+          status: transcript.status,
+        },
+
+        newValue: {
+          status: "APPROVED",
+          approvedAt,
+        },
+
+        ...(ipAddress !== undefined
+          ? { ipAddress }
+          : {}),
+
+        ...(userAgent !== undefined
+          ? { userAgent }
+          : {}),
       },
     });
 
-  if (!transcript) {
-    throw new AppError(
-      "Transcript not found",
-      404,
-    );
-  }
-
-  if (transcript.status !== "GENERATED") {
-    throw new AppError(
-      `Transcript cannot be approved from ${transcript.status} status`,
-      400,
-    );
-  }
-
-  const approvedAt = new Date();
-
-  return prisma.transcript.update({
-    where: {
-      id,
-    },
-    data: {
-      status: "APPROVED",
-      approvedAt,
-    },
-    select: transcriptSelect,
+    return transcriptAfter;
   });
 };
 
 export const issueTranscript = async (
   id: string,
+  actorId: string,
+  ipAddress?: string,
+  userAgent?: string,
 ) => {
-  const transcript =
-    await prisma.transcript.findUnique({
-      where: {
-        id,
-      },
-      select: {
-        id: true,
-        status: true,
-        transcriptNo: true,
+  return prisma.$transaction(async (tx) => {
+    const transcript =
+      await tx.transcript.findUnique({
+        where: {
+          id,
+        },
+        select: {
+          id: true,
+          status: true,
+          transcriptNo: true,
+        },
+      });
+
+    if (!transcript) {
+      throw new AppError(
+        "Transcript not found",
+        404,
+      );
+    }
+
+    if (transcript.status !== "APPROVED") {
+      throw new AppError(
+        `Transcript cannot be issued from ${transcript.status} status`,
+        400,
+      );
+    }
+
+    const issuedAt = new Date();
+
+    const updatedTranscript =
+      await tx.transcript.updateMany({
+        where: {
+          id,
+          status: "APPROVED",
+        },
+        data: {
+          status: "ISSUED",
+          issuedAt,
+        },
+      });
+
+    if (updatedTranscript.count !== 1) {
+      throw new AppError(
+        "Transcript issuance failed because its status changed",
+        409,
+      );
+    }
+
+    const transcriptAfter =
+      await tx.transcript.findUnique({
+        where: {
+          id,
+        },
+        select: transcriptSelect,
+      });
+
+    if (!transcriptAfter) {
+      throw new AppError(
+        "Transcript not found after issuance",
+        404,
+      );
+    }
+
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        action: "TRANSCRIPT_ISSUED",
+        entity: "Transcript",
+        entityId: transcript.id,
+
+        oldValue: {
+          status: transcript.status,
+        },
+
+        newValue: {
+          status: "ISSUED",
+          issuedAt,
+        },
+
+        ...(ipAddress !== undefined
+          ? { ipAddress }
+          : {}),
+
+        ...(userAgent !== undefined
+          ? { userAgent }
+          : {}),
       },
     });
 
-  if (!transcript) {
-    throw new AppError(
-      "Transcript not found",
-      404,
-    );
-  }
-
-  if (transcript.status !== "APPROVED") {
-    throw new AppError(
-      `Transcript cannot be issued from ${transcript.status} status`,
-      400,
-    );
-  }
-
-  return prisma.transcript.update({
-    where: {
-      id,
-    },
-    data: {
-      status: "ISSUED",
-      issuedAt: new Date(),
-    },
-    select: transcriptSelect,
+    return transcriptAfter;
   });
 };
 
 export const getMyIssuedTranscripts =
-  async (userId: string) => {
+  async (
+    userId: string,
+  ) => {
     const student =
       await getStudentByUserId(userId);
 
@@ -472,128 +625,195 @@ export const getMyIssuedTranscripts =
         studentId: student.id,
         status: "ISSUED",
       },
+
       orderBy: {
         issuedAt: "desc",
       },
+
       select: transcriptSelect,
     });
   };
 
 export const revokeTranscript = async (
   id: string,
+  actorId: string,
+  ipAddress?: string,
+  userAgent?: string,
 ) => {
-  const transcript =
-    await prisma.transcript.findUnique({
-      where: {
-        id,
-      },
-      select: {
-        id: true,
-        status: true,
-        transcriptNo: true,
+  return prisma.$transaction(async (tx) => {
+    const transcript =
+      await tx.transcript.findUnique({
+        where: {
+          id,
+        },
+        select: {
+          id: true,
+          status: true,
+          transcriptNo: true,
+        },
+      });
+
+    if (!transcript) {
+      throw new AppError(
+        "Transcript not found",
+        404,
+      );
+    }
+
+    if (transcript.status !== "ISSUED") {
+      throw new AppError(
+        `Transcript cannot be revoked from ${transcript.status} status`,
+        400,
+      );
+    }
+
+    const updatedTranscript =
+      await tx.transcript.updateMany({
+        where: {
+          id,
+          status: "ISSUED",
+        },
+        data: {
+          status: "REVOKED",
+        },
+      });
+
+    if (updatedTranscript.count !== 1) {
+      throw new AppError(
+        "Transcript revocation failed because its status changed",
+        409,
+      );
+    }
+
+    const transcriptAfter =
+      await tx.transcript.findUnique({
+        where: {
+          id,
+        },
+        select: transcriptSelect,
+      });
+
+    if (!transcriptAfter) {
+      throw new AppError(
+        "Transcript not found after revocation",
+        404,
+      );
+    }
+
+    await tx.auditLog.create({
+      data: {
+        actorId,
+        action: "TRANSCRIPT_REVOKED",
+        entity: "Transcript",
+        entityId: transcript.id,
+
+        oldValue: {
+          status: transcript.status,
+        },
+
+        newValue: {
+          status: "REVOKED",
+        },
+
+        ...(ipAddress !== undefined
+          ? { ipAddress }
+          : {}),
+
+        ...(userAgent !== undefined
+          ? { userAgent }
+          : {}),
       },
     });
 
-  if (!transcript) {
-    throw new AppError(
-      "Transcript not found",
-      404,
-    );
-  }
-
-  if (transcript.status !== "ISSUED") {
-    throw new AppError(
-      `Transcript cannot be revoked from ${transcript.status} status`,
-      400,
-    );
-  }
-
-  return prisma.transcript.update({
-    where: {
-      id,
-    },
-    data: {
-      status: "REVOKED",
-    },
-    select: transcriptSelect,
+    return transcriptAfter;
   });
 };
 
-export const getStudentTranscripts = async (
-  studentId: string,
-  query: TranscriptListQueryInput,
-) => {
-  const student =
-    await prisma.studentProfile.findUnique({
-      where: {
-        id: studentId,
-      },
-      select: {
-        id: true,
-        studentId: true,
-        firstName: true,
-        lastName: true,
-      },
-    });
-
-  if (!student) {
-    throw new AppError(
-      "Student profile not found",
-      404,
-    );
-  }
-
-  const {
-    page,
-    limit,
-    semesterId,
-    status,
-    sortOrder,
-  } = query;
-
-  const skip = (page - 1) * limit;
-
-  const where: Prisma.TranscriptWhereInput = {
-    studentId,
-    ...(semesterId
-      ? {
-          semesterId,
-        }
-      : {}),
-    ...(status
-      ? {
-          status,
-        }
-      : {}),
-  };
-
-  const [items, total] =
-    await prisma.$transaction([
-      prisma.transcript.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: {
-          createdAt: sortOrder,
+export const getStudentTranscripts =
+  async (
+    studentId: string,
+    query: TranscriptListQueryInput,
+  ) => {
+    const student =
+      await prisma.studentProfile.findUnique({
+        where: {
+          id: studentId,
         },
-        select: transcriptSelect,
-      }),
 
-      prisma.transcript.count({
-        where,
-      }),
-    ]);
+        select: {
+          id: true,
+          studentId: true,
+          firstName: true,
+          lastName: true,
+        },
+      });
 
-  return {
-    student,
-    items,
-    pagination: {
+    if (!student) {
+      throw new AppError(
+        "Student profile not found",
+        404,
+      );
+    }
+
+    const {
       page,
       limit,
-      total,
-      totalPages: Math.ceil(
-        total / limit,
-      ),
-    },
+      semesterId,
+      status,
+      sortOrder,
+    } = query;
+
+    const skip =
+      (page - 1) * limit;
+
+    const where: Prisma.TranscriptWhereInput =
+    {
+      studentId,
+
+      ...(semesterId
+        ? {
+          semesterId,
+        }
+        : {}),
+
+      ...(status
+        ? {
+          status,
+        }
+        : {}),
+    };
+
+    const [items, total] =
+      await prisma.$transaction([
+        prisma.transcript.findMany({
+          where,
+          skip,
+          take: limit,
+
+          orderBy: {
+            createdAt: sortOrder,
+          },
+
+          select: transcriptSelect,
+        }),
+
+        prisma.transcript.count({
+          where,
+        }),
+      ]);
+
+    return {
+      student,
+      items,
+
+      pagination: {
+        page,
+        limit,
+        total,
+
+        totalPages: Math.ceil(
+          total / limit,
+        ),
+      },
+    };
   };
-};
