@@ -109,6 +109,11 @@ export const resultListQuerySchema =
       .default("desc"),
   });
 
+    export const resultSemesterGpaParamsSchema =
+  z.object({
+    semesterId: z.string().uuid(),
+  });
+
 export type CreateResultInput =
   z.infer<typeof createResultSchema>;
 
@@ -117,3 +122,4 @@ export type UpdateResultInput =
 
 export type ResultListQueryInput =
   z.infer<typeof resultListQuerySchema>;
+

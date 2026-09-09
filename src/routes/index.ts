@@ -15,6 +15,7 @@ import attendanceRouter from "../modules/attendance/attendance.routes.js";
 import examRouter from "../modules/exams/exam.routes.js";
 import resultRouter from "../modules/results/result.routes.js";
 import transcriptRouter from "../modules/transcripts/transcript.routes.js";
+import feeRoutes from "../modules/fees/fee.routes.js";
 
 const router = Router();
 
@@ -99,5 +100,7 @@ router.use(
   "/transcripts",
   transcriptRouter,
 );
+
+router.use("/fees", feeRoutes);
 
 export default router;

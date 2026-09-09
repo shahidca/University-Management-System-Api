@@ -1,15 +1,14 @@
 import type { Request, Response } from "express";
 
 import { sendSuccess } from "../../utils/api-response.js";
-import {
-  getStudentCgpa,
-  getStudentSemesterGpa,
-} from "./result.service.js";
+
 import {
   approveResult,
   createResult,
   getResultById,
   getResults,
+  getStudentCgpa,
+  getStudentSemesterGpa,
   publishResult,
   submitResult,
   updateResult,
@@ -141,39 +140,35 @@ export const publishResultController = async (
   );
 };
 
-export const getMySemesterGpaController =
-  async (
-    req: Request,
-    res: Response,
-  ) => {
-    const result =
-      await getStudentSemesterGpa(
-        req.user!.userId,
-        req.params.semesterId as string,
-      );
+export const getMySemesterGpaController = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await getStudentSemesterGpa(
+    req.user!.userId,
+    req.params.semesterId as string,
+  );
 
-    return sendSuccess(
-      res,
-      200,
-      "Semester GPA calculated successfully",
-      result,
-    );
-  };
+  return sendSuccess(
+    res,
+    200,
+    "Semester GPA calculated successfully",
+    result,
+  );
+};
 
-  export const getMyCgpaController =
-  async (
-    req: Request,
-    res: Response,
-  ) => {
-    const result =
-      await getStudentCgpa(
-        req.user!.userId,
-      );
+export const getMyCgpaController = async (
+  req: Request,
+  res: Response,
+) => {
+  const result = await getStudentCgpa(
+    req.user!.userId,
+  );
 
-    return sendSuccess(
-      res,
-      200,
-      "CGPA calculated successfully",
-      result,
-    );
-  };
+  return sendSuccess(
+    res,
+    200,
+    "CGPA calculated successfully",
+    result,
+  );
+};

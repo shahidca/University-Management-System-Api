@@ -63,5 +63,49 @@ export const calculateGpa = (
 export const calculateCgpa = (
   results: GpaCourseResult[],
 ): GpaCalculation => {
-  return calculateGpa(results);
+  if (results.length === 0) {
+    throw new AppError(
+      "No published course results available for CGPA calculation",
+      404,
+    );
+  }
+
+  const totalCredits = results.reduce(
+    (sum, result) =>
+      sum + result.credits,
+    0,
+  );
+
+  if (totalCredits <= 0) {
+    throw new AppError(
+      "CGPA cannot be calculated because total credits are zero",
+      400,
+    );
+  }
+
+  const totalQualityPoints =
+    results.reduce(
+      (sum, result) =>
+        sum +
+        result.gradePoint *
+          result.credits,
+      0,
+    );
+
+  const cgpa =
+    totalQualityPoints /
+    totalCredits;
+
+  return {
+    totalCredits:
+      roundToTwo(totalCredits),
+
+    totalQualityPoints:
+      roundToTwo(totalQualityPoints),
+
+    gpa:
+      roundToTwo(cgpa),
+
+    courses: results,
+  };
 };

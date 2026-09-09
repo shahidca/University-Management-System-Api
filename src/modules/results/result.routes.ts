@@ -4,15 +4,12 @@ import { authenticate } from "../../middlewares/auth.middleware.js";
 import { requireRole } from "../../middlewares/rbac.middleware.js";
 import { validateRequest } from "../../middlewares/validation.middleware.js";
 import { asyncHandler } from "../../utils/async-handler.js";
-import {
-  getMyCgpaController,
-} from "./result.controller.js";
-import {
-  getMySemesterGpaController,
-} from "./result.controller.js";
+
 import {
   approveResultController,
   createResultController,
+  getMyCgpaController,
+  getMySemesterGpaController,
   getResultByIdController,
   getResultsController,
   publishResultController,
@@ -23,6 +20,7 @@ import {
 import {
   createResultSchema,
   resultListQuerySchema,
+  resultSemesterGpaParamsSchema,
   updateResultSchema,
 } from "./result.validation.js";
 
@@ -45,9 +43,46 @@ router.get(
 );
 
 /**
+ * GET /api/v1/results/my/semester/:semesterId/gpa
+ *
+ * Retrieve current student's semester GPA.
+ *
+ * IMPORTANT:
+ * This route must appear before /:id.
+ */
+router.get(
+  "/my/semester/:semesterId/gpa",
+  authenticate,
+  requireRole("STUDENT"),
+  validateRequest({
+    params: resultSemesterGpaParamsSchema,
+  }),
+  asyncHandler(
+    getMySemesterGpaController,
+  ),
+);
+
+/**
+ * GET /api/v1/results/my/cgpa
+ *
+ * Retrieve current student's cumulative GPA.
+ */
+router.get(
+  "/my/cgpa",
+  authenticate,
+  requireRole("STUDENT"),
+  asyncHandler(
+    getMyCgpaController,
+  ),
+);
+
+/**
  * GET /api/v1/results/:id
  *
  * Retrieve a single result.
+ *
+ * IMPORTANT:
+ * Keep this after all /my/... routes.
  */
 router.get(
   "/:id",
@@ -130,24 +165,6 @@ router.patch(
   requireRole("ADMIN"),
   asyncHandler(
     publishResultController,
-  ),
-);
-
-router.get(
-  "/my/semester/:semesterId/gpa",
-  authenticate,
-  requireRole("STUDENT"),
-  asyncHandler(
-    getMySemesterGpaController,
-  ),
-);
-
-router.get(
-  "/my/cgpa",
-  authenticate,
-  requireRole("STUDENT"),
-  asyncHandler(
-    getMyCgpaController,
   ),
 );
 
