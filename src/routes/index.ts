@@ -16,6 +16,9 @@ import examRouter from "../modules/exams/exam.routes.js";
 import resultRouter from "../modules/results/result.routes.js";
 import transcriptRouter from "../modules/transcripts/transcript.routes.js";
 import feeRoutes from "../modules/fees/fee.routes.js";
+import invoiceRoutes from "../modules/invoices/invoice.routes.js";
+import paymentRoutes from "../modules/payments/payment.routes.js";
+import paymentWebhookRoutes from "../modules/payments/payment.webhook.routes.js";
 
 const router = Router();
 
@@ -102,5 +105,17 @@ router.use(
 );
 
 router.use("/fees", feeRoutes);
+
+router.use("/invoices", invoiceRoutes);
+
+router.use(
+  "/payments",
+  paymentRoutes,
+);
+
+router.use(
+  "/payments/webhook/sslcommerz",
+  paymentWebhookRoutes,
+);
 
 export default router;
