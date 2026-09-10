@@ -18,6 +18,8 @@ import {
   paymentTransactionParamSchema,
 } from "./payment.validation.js";
 
+import reconciliationRoutes from "./payment.reconciliation.routes.js";
+
 const router = Router();
 
 router.use(authenticate);
@@ -75,6 +77,11 @@ router.post(
       initiatePaymentSchema,
   }),
   initiatePaymentController,
+);
+
+router.use(
+  "/",
+  reconciliationRoutes,
 );
 
 export default router;

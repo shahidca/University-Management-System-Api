@@ -120,10 +120,15 @@ export const initiatePayment = async (
   }
 
   const payment =
-    await prisma.$transaction(
-      async (tx) => {
-        const invoice =
-          await tx.invoice.findUnique({
+  await prisma.$transaction(
+    async (tx) => {
+      await lockInvoiceForPayment(
+        tx,
+        input.invoiceId,
+      );
+
+      const invoice =
+        await tx.invoice.findUnique({
             where: {
               id: input.invoiceId,
             },
@@ -691,3 +696,14 @@ export const getPaymentByTransactionId =
 
     return payment;
   };
+
+const lockInvoiceForPayment = async (
+  tx: Prisma.TransactionClient,
+  invoiceId: string,
+): Promise<void> => {
+  await tx.$executeRaw`
+    SELECT pg_advisory_xact_lock(
+      hashtextextended(${invoiceId}, 0)
+    )
+  `;
+};

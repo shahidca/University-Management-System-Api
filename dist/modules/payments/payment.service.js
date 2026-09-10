@@ -67,6 +67,7 @@ export const initiatePayment = async (input, actorId) => {
         throw new AppError("Only SSLCommerz is currently implemented", 400);
     }
     const payment = await prisma.$transaction(async (tx) => {
+        await lockInvoiceForPayment(tx, input.invoiceId);
         const invoice = await tx.invoice.findUnique({
             where: {
                 id: input.invoiceId,
@@ -410,5 +411,12 @@ export const getPaymentByTransactionId = async (transactionId) => {
         throw new AppError("Payment not found", 404);
     }
     return payment;
+};
+const lockInvoiceForPayment = async (tx, invoiceId) => {
+    await tx.$executeRaw `
+    SELECT pg_advisory_xact_lock(
+      hashtextextended(${invoiceId}, 0)
+    )
+  `;
 };
 //# sourceMappingURL=payment.service.js.map

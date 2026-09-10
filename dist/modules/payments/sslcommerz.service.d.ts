@@ -30,5 +30,22 @@ export interface SSLCommerzValidationResponse {
 }
 export declare const initiateSSLCommerzPayment: (input: SSLCommerzInitInput) => Promise<SSLCommerzInitResponse>;
 export declare const validateSSLCommerzPayment: (validationId: string) => Promise<SSLCommerzValidationResponse>;
+export interface SSLCommerzTransactionQueryResponse {
+    status?: string;
+    APIConnect?: string;
+    sessionkey?: string;
+    tran_date?: string;
+    tran_id?: string;
+    val_id?: string;
+    amount?: string;
+    currency?: string;
+    bank_tran_id?: string;
+    card_type?: string;
+    card_brand?: string;
+    risk_level?: string;
+    risk_title?: string;
+    error?: string;
+}
+export declare const querySSLCommerzTransaction: (transactionId: string) => Promise<SSLCommerzTransactionQueryResponse>;
 export {};
 //# sourceMappingURL=sslcommerz.service.d.ts.map

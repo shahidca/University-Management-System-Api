@@ -237,3 +237,61 @@ export const validateSSLCommerzPayment =
       throw error;
     }
   };
+
+  export interface SSLCommerzTransactionQueryResponse {
+  status?: string;
+  APIConnect?: string;
+  sessionkey?: string;
+  tran_date?: string;
+  tran_id?: string;
+  val_id?: string;
+  amount?: string;
+  currency?: string;
+  bank_tran_id?: string;
+  card_type?: string;
+  card_brand?: string;
+  risk_level?: string;
+  risk_title?: string;
+  error?: string;
+}
+
+export const querySSLCommerzTransaction = async (
+  transactionId: string,
+): Promise<SSLCommerzTransactionQueryResponse> => {
+  const queryUrl = env.SSLCOMMERZ_IS_LIVE
+    ? "https://securepay.sslcommerz.com/validator/api/merchantTransIDvalidationAPI.php"
+    : "https://sandbox.sslcommerz.com/validator/api/merchantTransIDvalidationAPI.php";
+
+  try {
+    const response =
+      await axios.get<SSLCommerzTransactionQueryResponse>(
+        queryUrl,
+        {
+          params: {
+            store_id: env.SSLCOMMERZ_STORE_ID,
+            store_passwd:
+              env.SSLCOMMERZ_STORE_PASSWORD,
+            tran_id: transactionId,
+          },
+          timeout: 15_000,
+        },
+      );
+
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      throw new AppError(
+        "Failed to query SSLCommerz transaction",
+        502,
+        [
+          {
+            provider: "SSLCommerz",
+            status: error.response?.status,
+          },
+        ],
+      );
+    }
+
+    throw error;
+  }
+};
