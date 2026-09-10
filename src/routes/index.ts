@@ -20,6 +20,7 @@ import invoiceRoutes from "../modules/invoices/invoice.routes.js";
 import paymentRoutes from "../modules/payments/payment.routes.js";
 import paymentWebhookRoutes from "../modules/payments/payment.webhook.routes.js";
 import auditLogRoutes from "../modules/audit-logs/audit-log.routes.js";
+import notificationRoutes from "../modules/notifications/notification.routes.js";
 
 const router = Router();
 
@@ -122,6 +123,11 @@ router.use(
 router.use(
   "/audit-logs",
   auditLogRoutes,
+);
+
+router.use(
+  "/notifications",
+  notificationRoutes,
 );
 
 export default router;
