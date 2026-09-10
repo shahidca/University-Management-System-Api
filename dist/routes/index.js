@@ -19,6 +19,7 @@ import feeRoutes from "../modules/fees/fee.routes.js";
 import invoiceRoutes from "../modules/invoices/invoice.routes.js";
 import paymentRoutes from "../modules/payments/payment.routes.js";
 import paymentWebhookRoutes from "../modules/payments/payment.webhook.routes.js";
+import auditLogRoutes from "../modules/audit-logs/audit-log.routes.js";
 const router = Router();
 router.get("/", (_req, res) => {
     res.status(200).json({
@@ -50,5 +51,6 @@ router.use("/fees", feeRoutes);
 router.use("/invoices", invoiceRoutes);
 router.use("/payments", paymentRoutes);
 router.use("/payments/webhook/sslcommerz", paymentWebhookRoutes);
+router.use("/audit-logs", auditLogRoutes);
 export default router;
 //# sourceMappingURL=index.js.map
