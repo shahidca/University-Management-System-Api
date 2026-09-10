@@ -85,4 +85,7 @@ export const resultListQuerySchema = z.object({
         .enum(["asc", "desc"])
         .default("desc"),
 });
+export const resultSemesterGpaParamsSchema = z.object({
+    semesterId: z.string().uuid(),
+});
 //# sourceMappingURL=result.validation.js.map

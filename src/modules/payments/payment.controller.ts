@@ -20,9 +20,10 @@ export const initiatePaymentController =
       res: Response,
     ) => {
       const payment =
-        await initiatePayment(
-          req.body,
-        );
+await initiatePayment(
+  req.body,
+  req.user!.userId,
+);
 
       return sendSuccess(
         res,
@@ -92,3 +93,4 @@ export const getPaymentByTransactionIdController =
       );
     },
   );
+

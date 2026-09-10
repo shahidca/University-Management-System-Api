@@ -1,6 +1,5 @@
 import { sendSuccess } from "../../utils/api-response.js";
-import { getStudentCgpa, getStudentSemesterGpa, } from "./result.service.js";
-import { approveResult, createResult, getResultById, getResults, publishResult, submitResult, updateResult, } from "./result.service.js";
+import { approveResult, createResult, getResultById, getResults, getStudentCgpa, getStudentSemesterGpa, publishResult, submitResult, updateResult, } from "./result.service.js";
 export const createResultController = async (req, res) => {
     const result = await createResult(req.user.userId, req.body);
     return sendSuccess(res, 201, "Result created successfully", result);

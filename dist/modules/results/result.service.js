@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { calculateCgpa, calculateGpa, } from "./result.gpa.js";
+import { calculateCourseGrade, } from "./result.course-grade.js";
 import { prisma } from "../../config/database.js";
 import { AppError } from "../../utils/app-error.js";
 const resultSelect = {
@@ -98,7 +99,9 @@ const resultSelect = {
     },
 };
 /**
- * Central grading function.
+ * ---------------------------------------------------------
+ * GRADING
+ * ---------------------------------------------------------
  *
  * The client never controls grade or gradePoint.
  * Both values are calculated on the server.
@@ -115,6 +118,10 @@ const resultSelect = {
  * 45-49  -> C  -> 2.25
  * 40-44  -> D  -> 2.00
  * 0-39   -> F  -> 0.00
+ *
+ * NOTE:
+ * This grading scale should be replaced/configured when
+ * the official university grading policy is finalized.
  */
 const calculateGrade = (marks) => {
     if (marks >= 80) {
@@ -176,6 +183,11 @@ const calculateGrade = (marks) => {
         gradePoint: 0,
     };
 };
+/**
+ * ---------------------------------------------------------
+ * INSTRUCTOR
+ * ---------------------------------------------------------
+ */
 const getInstructorByUserId = async (userId) => {
     const instructor = await prisma.instructorProfile.findUnique({
         where: {
@@ -199,6 +211,11 @@ const getInstructorByUserId = async (userId) => {
     }
     return instructor;
 };
+/**
+ * ---------------------------------------------------------
+ * EXAM + ENROLLMENT VALIDATION
+ * ---------------------------------------------------------
+ */
 const getExamAndEnrollment = async (examId, enrollmentId) => {
     const exam = await prisma.exam.findUnique({
         where: {
@@ -263,6 +280,11 @@ const getExamAndEnrollment = async (examId, enrollmentId) => {
         enrollment,
     };
 };
+/**
+ * ---------------------------------------------------------
+ * ACADEMIC STATE VALIDATION
+ * ---------------------------------------------------------
+ */
 const validateAcademicState = ({ sectionActive, offeringActive, courseActive, courseDeletedAt, semesterStatus, }) => {
     if (!sectionActive) {
         throw new AppError("Section is inactive", 400);
@@ -270,40 +292,65 @@ const validateAcademicState = ({ sectionActive, offeringActive, courseActive, co
     if (!offeringActive) {
         throw new AppError("Course offering is inactive", 400);
     }
-    if (!courseActive || courseDeletedAt) {
+    if (!courseActive ||
+        courseDeletedAt) {
         throw new AppError("Course is inactive or deleted", 400);
     }
-    if (semesterStatus === "COMPLETED") {
+    if (semesterStatus ===
+        "COMPLETED") {
         throw new AppError("Cannot manage results for a completed semester", 400);
     }
 };
+/**
+ * ---------------------------------------------------------
+ * MARKS VALIDATION
+ * ---------------------------------------------------------
+ */
 const validateMarks = (marksObtained, totalMarks) => {
     if (marksObtained < 0) {
         throw new AppError("Marks obtained cannot be negative", 400);
     }
     const maximumMarks = totalMarks.toNumber();
-    if (marksObtained > maximumMarks) {
+    if (marksObtained >
+        maximumMarks) {
         throw new AppError(`Marks obtained cannot exceed ${maximumMarks}`, 400);
     }
 };
+/**
+ * ---------------------------------------------------------
+ * ENROLLMENT VALIDATION
+ * ---------------------------------------------------------
+ */
 const ensureEnrollmentIsValid = (status) => {
     if (status !== "ENROLLED") {
         throw new AppError("Results can only be recorded for an enrolled student", 400);
     }
 };
+/**
+ * ---------------------------------------------------------
+ * CREATE RESULT
+ * ---------------------------------------------------------
+ */
 export const createResult = async (userId, input) => {
     const instructor = await getInstructorByUserId(userId);
     const { exam, enrollment, } = await getExamAndEnrollment(input.examId, input.enrollmentId);
     validateAcademicState({
         sectionActive: exam.section.isActive,
-        offeringActive: exam.section.courseOffering
+        offeringActive: exam.section
+            .courseOffering
             .isActive,
-        courseActive: exam.section.courseOffering
-            .course.isActive,
-        courseDeletedAt: exam.section.courseOffering
-            .course.deletedAt,
-        semesterStatus: exam.section.courseOffering
-            .semester.status,
+        courseActive: exam.section
+            .courseOffering
+            .course
+            .isActive,
+        courseDeletedAt: exam.section
+            .courseOffering
+            .course
+            .deletedAt,
+        semesterStatus: exam.section
+            .courseOffering
+            .semester
+            .status,
     });
     if (exam.section.instructorId !==
         instructor.id) {
@@ -351,23 +398,30 @@ export const createResult = async (userId, input) => {
     catch (error) {
         if (error instanceof
             Prisma.PrismaClientKnownRequestError) {
-            if (error.code === "P2002") {
+            if (error.code ===
+                "P2002") {
                 throw new AppError("A result already exists for this exam and enrollment", 409);
             }
         }
         throw error;
     }
 };
+/**
+ * ---------------------------------------------------------
+ * GET RESULT BY ID
+ * ---------------------------------------------------------
+ */
 export const getResultById = async (userId, role, id) => {
     const where = {
         id,
     };
     /**
      * Students can only access
-     * their own published result.
+     * their own published results.
      */
     if (role === "STUDENT") {
-        where.status = "PUBLISHED";
+        where.status =
+            "PUBLISHED";
         where.enrollment = {
             student: {
                 userId,
@@ -396,9 +450,15 @@ export const getResultById = async (userId, role, id) => {
     }
     return result;
 };
+/**
+ * ---------------------------------------------------------
+ * GET RESULTS
+ * ---------------------------------------------------------
+ */
 export const getResults = async (userId, role, query) => {
     const { page, limit, examId, enrollmentId, studentId, sectionId, status, grade, search, sortBy, sortOrder, } = query;
-    const skip = (page - 1) * limit;
+    const skip = (page - 1) *
+        limit;
     const enrollmentWhere = {
         ...(studentId
             ? {
@@ -491,15 +551,17 @@ export const getResults = async (userId, role, query) => {
             }
             : {}),
     };
-    /*
+    /**
      * Students can only see published results.
-     * This must override any status supplied
-     * through the query string.
+     *
+     * This intentionally overrides any status
+     * supplied through the query string.
      */
     if (role === "STUDENT") {
-        where.status = "PUBLISHED";
+        where.status =
+            "PUBLISHED";
     }
-    const [results, total] = await prisma.$transaction([
+    const [results, total,] = await prisma.$transaction([
         prisma.result.findMany({
             where,
             skip,
@@ -523,6 +585,11 @@ export const getResults = async (userId, role, query) => {
         },
     };
 };
+/**
+ * ---------------------------------------------------------
+ * UPDATE RESULT
+ * ---------------------------------------------------------
+ */
 export const updateResult = async (userId, resultId, input) => {
     const instructor = await getInstructorByUserId(userId);
     const existingResult = await prisma.result.findUnique({
@@ -568,27 +635,38 @@ export const updateResult = async (userId, resultId, input) => {
     if (!existingResult) {
         throw new AppError("Result not found", 404);
     }
-    if (existingResult.exam.section
+    if (existingResult.exam
+        .section
         .instructorId !==
         instructor.id) {
         throw new AppError("You are not assigned to this section", 403);
     }
     validateAcademicState({
-        sectionActive: existingResult.exam.section
+        sectionActive: existingResult.exam
+            .section
             .isActive,
-        offeringActive: existingResult.exam.section
-            .courseOffering.isActive,
-        courseActive: existingResult.exam.section
-            .courseOffering.course
+        offeringActive: existingResult.exam
+            .section
+            .courseOffering
             .isActive,
-        courseDeletedAt: existingResult.exam.section
-            .courseOffering.course
+        courseActive: existingResult.exam
+            .section
+            .courseOffering
+            .course
+            .isActive,
+        courseDeletedAt: existingResult.exam
+            .section
+            .courseOffering
+            .course
             .deletedAt,
-        semesterStatus: existingResult.exam.section
-            .courseOffering.semester
+        semesterStatus: existingResult.exam
+            .section
+            .courseOffering
+            .semester
             .status,
     });
-    if (!existingResult.exam.isPublished) {
+    if (!existingResult.exam
+        .isPublished) {
         throw new AppError("The related exam is not published", 400);
     }
     if (existingResult.status !==
@@ -618,6 +696,11 @@ export const updateResult = async (userId, resultId, input) => {
         select: resultSelect,
     });
 };
+/**
+ * ---------------------------------------------------------
+ * SUBMIT RESULT
+ * ---------------------------------------------------------
+ */
 export const submitResult = async (userId, resultId) => {
     const instructor = await getInstructorByUserId(userId);
     const result = await prisma.result.findUnique({
@@ -668,7 +751,8 @@ export const submitResult = async (userId, resultId) => {
         sectionActive: result.exam.section
             .isActive,
         offeringActive: result.exam.section
-            .courseOffering.isActive,
+            .courseOffering
+            .isActive,
         courseActive: result.exam.section
             .courseOffering.course
             .isActive,
@@ -682,7 +766,8 @@ export const submitResult = async (userId, resultId) => {
     if (!result.exam.isPublished) {
         throw new AppError("The related exam is not published", 400);
     }
-    if (result.status !== "DRAFT") {
+    if (result.status !==
+        "DRAFT") {
         throw new AppError("Only draft results can be submitted", 400);
     }
     return prisma.result.update({
@@ -696,6 +781,11 @@ export const submitResult = async (userId, resultId) => {
         select: resultSelect,
     });
 };
+/**
+ * ---------------------------------------------------------
+ * APPROVE RESULT
+ * ---------------------------------------------------------
+ */
 export const approveResult = async (resultId) => {
     const result = await prisma.result.findUnique({
         where: {
@@ -743,7 +833,8 @@ export const approveResult = async (resultId) => {
         sectionActive: result.exam.section
             .isActive,
         offeringActive: result.exam.section
-            .courseOffering.isActive,
+            .courseOffering
+            .isActive,
         courseActive: result.exam.section
             .courseOffering.course
             .isActive,
@@ -768,6 +859,11 @@ export const approveResult = async (resultId) => {
         select: resultSelect,
     });
 };
+/**
+ * ---------------------------------------------------------
+ * PUBLISH RESULT
+ * ---------------------------------------------------------
+ */
 export const publishResult = async (resultId) => {
     const result = await prisma.result.findUnique({
         where: {
@@ -807,14 +903,16 @@ export const publishResult = async (resultId) => {
     if (!result) {
         throw new AppError("Result not found", 404);
     }
-    if (result.status !== "APPROVED") {
+    if (result.status !==
+        "APPROVED") {
         throw new AppError("Only approved results can be published", 400);
     }
     validateAcademicState({
         sectionActive: result.exam.section
             .isActive,
         offeringActive: result.exam.section
-            .courseOffering.isActive,
+            .courseOffering
+            .isActive,
         courseActive: result.exam.section
             .courseOffering.course
             .isActive,
@@ -839,7 +937,12 @@ export const publishResult = async (resultId) => {
         select: resultSelect,
     });
 };
-export const getStudentSemesterGpa = async (userId, semesterId) => {
+/**
+ * ---------------------------------------------------------
+ * STUDENT HELPER
+ * ---------------------------------------------------------
+ */
+const getStudentByUserId = async (userId) => {
     const student = await prisma.studentProfile.findUnique({
         where: {
             userId,
@@ -854,6 +957,31 @@ export const getStudentSemesterGpa = async (userId, semesterId) => {
     if (!student) {
         throw new AppError("Student profile not found", 404);
     }
+    return student;
+};
+const buildCourseGrade = (course) => {
+    const calculation = calculateCourseGrade(course.exams);
+    return {
+        semesterId: course.semesterId,
+        courseId: course.courseId,
+        courseCode: course.courseCode,
+        courseTitle: course.courseTitle,
+        credits: course.credits,
+        grade: calculation.grade,
+        gradePoint: calculation.gradePoint,
+        percentage: calculation.percentage,
+        totalMarksObtained: calculation.totalMarksObtained,
+        totalMarks: calculation.totalMarks,
+        exams: calculation.examResults,
+    };
+};
+/**
+ * ---------------------------------------------------------
+ * GET STUDENT SEMESTER GPA
+ * ---------------------------------------------------------
+ */
+export const getStudentSemesterGpa = async (userId, semesterId) => {
+    const student = await getStudentByUserId(userId);
     const semester = await prisma.semester.findUnique({
         where: {
             id: semesterId,
@@ -872,6 +1000,19 @@ export const getStudentSemesterGpa = async (userId, semesterId) => {
             status: "PUBLISHED",
             enrollment: {
                 studentId: student.id,
+                status: {
+                    in: [
+                        "ENROLLED",
+                        "COMPLETED",
+                    ],
+                },
+                section: {
+                    courseOffering: {
+                        semesterId,
+                    },
+                },
+            },
+            exam: {
                 section: {
                     courseOffering: {
                         semesterId,
@@ -880,14 +1021,18 @@ export const getStudentSemesterGpa = async (userId, semesterId) => {
             },
         },
         select: {
-            grade: true,
-            gradePoint: true,
-            enrollment: {
+            id: true,
+            marksObtained: true,
+            exam: {
                 select: {
+                    id: true,
+                    examType: true,
+                    totalMarks: true,
                     section: {
                         select: {
                             courseOffering: {
                                 select: {
+                                    courseId: true,
                                     credits: true,
                                     course: {
                                         select: {
@@ -903,26 +1048,54 @@ export const getStudentSemesterGpa = async (userId, semesterId) => {
                 },
             },
         },
+        orderBy: {
+            createdAt: "asc",
+        },
     });
     if (results.length === 0) {
         throw new AppError("No published results found for this semester", 404);
     }
-    const courses = results.map((result) => {
-        const course = result.enrollment.section
-            .courseOffering.course;
-        const credits = Number(result.enrollment.section
-            .courseOffering.credits);
-        const gradePoint = Number(result.gradePoint ?? 0);
-        return {
-            courseId: course.id,
-            courseCode: course.code,
-            courseTitle: course.title,
-            credits,
-            grade: result.grade ?? "N/A",
-            gradePoint,
+    const groupedCourses = new Map();
+    for (const result of results) {
+        const offering = result.exam.section
+            .courseOffering;
+        const key = offering.courseId;
+        const examResult = {
+            examId: result.exam.id,
+            examType: result.exam
+                .examType,
+            marksObtained: Number(result.marksObtained),
+            totalMarks: Number(result.exam
+                .totalMarks),
         };
-    });
-    const calculation = calculateGpa(courses);
+        const existing = groupedCourses.get(key);
+        if (existing) {
+            existing.exams.push(examResult);
+            continue;
+        }
+        groupedCourses.set(key, {
+            courseId: offering.courseId,
+            semesterId,
+            courseCode: offering.course
+                .code,
+            courseTitle: offering.course
+                .title,
+            credits: Number(offering.credits),
+            exams: [
+                examResult,
+            ],
+        });
+    }
+    const courses = Array.from(groupedCourses.values()).map(buildCourseGrade);
+    const gpaCourses = courses.map((course) => ({
+        courseId: course.courseId,
+        courseCode: course.courseCode,
+        courseTitle: course.courseTitle,
+        credits: course.credits,
+        grade: course.grade,
+        gradePoint: course.gradePoint,
+    }));
+    const calculation = calculateGpa(gpaCourses);
     return {
         student: {
             id: student.id,
@@ -932,40 +1105,62 @@ export const getStudentSemesterGpa = async (userId, semesterId) => {
         },
         semester,
         ...calculation,
+        courses,
     };
 };
+/**
+ * ---------------------------------------------------------
+ * GET STUDENT CGPA
+ * ---------------------------------------------------------
+ *
+ * Important:
+ *
+ * CGPA must count each course only once per semester.
+ *
+ * Example:
+ *
+ * Semester 1:
+ *   CSE101 → one course
+ *
+ * Semester 2:
+ *   CSE101 → another course attempt
+ *
+ * These are two academic records because they belong to
+ * different semesters.
+ *
+ * Multiple exams inside the same course/semester are
+ * aggregated into ONE course result.
+ */
 export const getStudentCgpa = async (userId) => {
-    const student = await prisma.studentProfile.findUnique({
-        where: {
-            userId,
-        },
-        select: {
-            id: true,
-            studentId: true,
-            firstName: true,
-            lastName: true,
-        },
-    });
-    if (!student) {
-        throw new AppError("Student profile not found", 404);
-    }
+    const student = await getStudentByUserId(userId);
     const results = await prisma.result.findMany({
         where: {
             status: "PUBLISHED",
             enrollment: {
                 studentId: student.id,
+                status: {
+                    in: [
+                        "ENROLLED",
+                        "COMPLETED",
+                    ],
+                },
             },
         },
         select: {
-            grade: true,
-            gradePoint: true,
-            enrollment: {
+            id: true,
+            marksObtained: true,
+            exam: {
                 select: {
+                    id: true,
+                    examType: true,
+                    totalMarks: true,
                     section: {
                         select: {
                             courseOffering: {
                                 select: {
+                                    courseId: true,
                                     credits: true,
+                                    semesterId: true,
                                     course: {
                                         select: {
                                             id: true,
@@ -987,24 +1182,58 @@ export const getStudentCgpa = async (userId) => {
                 },
             },
         },
+        orderBy: {
+            createdAt: "asc",
+        },
     });
     if (results.length === 0) {
         throw new AppError("No published results found for CGPA calculation", 404);
     }
-    const courses = results.map((result) => {
-        const course = result.enrollment.section
-            .courseOffering.course;
-        return {
-            courseId: course.id,
-            courseCode: course.code,
-            courseTitle: course.title,
-            credits: Number(result.enrollment.section
-                .courseOffering.credits),
-            grade: result.grade ?? "N/A",
-            gradePoint: Number(result.gradePoint ?? 0),
+    const groupedCourses = new Map();
+    for (const result of results) {
+        const offering = result.exam.section
+            .courseOffering;
+        /**
+         * Course + semester is the academic identity
+         * for this aggregation.
+         */
+        const key = `${offering.semesterId}:${offering.courseId}`;
+        const examResult = {
+            examId: result.exam.id,
+            examType: result.exam
+                .examType,
+            marksObtained: Number(result.marksObtained),
+            totalMarks: Number(result.exam
+                .totalMarks),
         };
-    });
-    const calculation = calculateCgpa(courses);
+        const existing = groupedCourses.get(key);
+        if (existing) {
+            existing.exams.push(examResult);
+            continue;
+        }
+        groupedCourses.set(key, {
+            courseId: offering.courseId,
+            semesterId: offering.semesterId,
+            courseCode: offering.course
+                .code,
+            courseTitle: offering.course
+                .title,
+            credits: Number(offering.credits),
+            exams: [
+                examResult,
+            ],
+        });
+    }
+    const courses = Array.from(groupedCourses.values()).map(buildCourseGrade);
+    const gpaCourses = courses.map((course) => ({
+        courseId: course.courseId,
+        courseCode: course.courseCode,
+        courseTitle: course.courseTitle,
+        credits: course.credits,
+        grade: course.grade,
+        gradePoint: course.gradePoint,
+    }));
+    const calculation = calculateCgpa(gpaCourses);
     return {
         student: {
             id: student.id,
@@ -1013,6 +1242,7 @@ export const getStudentCgpa = async (userId) => {
             lastName: student.lastName,
         },
         ...calculation,
+        courses,
     };
 };
 //# sourceMappingURL=result.service.js.map

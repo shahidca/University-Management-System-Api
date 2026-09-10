@@ -28,6 +28,42 @@ const toNumber = (
   return number;
 };
 
+const isValidCurrency = (
+  value: unknown,
+): value is string => {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0
+  );
+};
+
+const mergeMetadata = (
+  existing: Prisma.JsonValue | null,
+  extra: Record<string, unknown>,
+): Prisma.InputJsonValue => {
+  const base =
+    typeof existing === "object" &&
+    existing !== null &&
+    !Array.isArray(existing)
+      ? (existing as Record<string, unknown>)
+      : {};
+
+  return {
+    ...base,
+    ...extra,
+  } as Prisma.InputJsonValue;
+};
+
+/**
+ * SSLCommerz IPN
+ *
+ * This is the authoritative payment notification endpoint.
+ *
+ * IMPORTANT:
+ * We never trust the IPN status alone.
+ * The transaction is validated against SSLCommerz's
+ * validation API before local payment state is changed.
+ */
 export const sslCommerzIpnController: RequestHandler =
   async (req, res, next) => {
     try {
@@ -68,9 +104,10 @@ export const sslCommerzIpnController: RequestHandler =
       }
 
       /*
-       * Idempotency:
-       * If the webhook is received again after
-       * successful processing, don't process it twice.
+       * Idempotency.
+       *
+       * SSLCommerz may send the same notification
+       * more than once.
        */
       if (
         payment.status ===
@@ -83,13 +120,17 @@ export const sslCommerzIpnController: RequestHandler =
           data: {
             transactionId,
             status:
-              payment.status,
+              PaymentStatus.SUCCESS,
           },
         });
 
         return;
       }
 
+      /*
+       * Validate the transaction directly
+       * with SSLCommerz.
+       */
       const validation =
         await validateSSLCommerzPayment(
           validationId,
@@ -99,28 +140,59 @@ export const sslCommerzIpnController: RequestHandler =
         toNumber(validation.amount);
 
       const expectedAmount =
-        Number(payment.amount);
-
-      const currencyMatches =
-        validation.currency ===
-        payment.currency;
+        toNumber(payment.amount);
 
       const amountMatches =
-        Number.isFinite(validatedAmount) &&
+        Number.isFinite(
+          validatedAmount,
+        ) &&
+        Number.isFinite(
+          expectedAmount,
+        ) &&
         Math.abs(
           validatedAmount -
             expectedAmount,
         ) < 0.01;
 
+      const currencyMatches =
+        isValidCurrency(
+          validation.currency,
+        ) &&
+        validation.currency.toUpperCase() ===
+          payment.currency.toUpperCase();
+
       const transactionMatches =
         validation.tran_id ===
         payment.transactionId;
 
-      if (
-        validation.status !== "VALID" &&
-        validation.status !==
-          "VALIDATED"
-      ) {
+      const validationMetadata = {
+        validationStatus:
+          validation.status,
+        validationId,
+        validatedAt:
+          new Date().toISOString(),
+        validatedAmount:
+          validation.amount,
+        validatedCurrency:
+          validation.currency,
+        bankTransactionId:
+          validation.bank_tran_id,
+        riskLevel:
+          validation.risk_level,
+        riskTitle:
+          validation.risk_title,
+      };
+
+      /*
+       * SSLCommerz validation status must be valid.
+       */
+      const validStatus =
+        validation.status ===
+          "VALID" ||
+        validation.status ===
+          "VALIDATED";
+
+      if (!validStatus) {
         await prisma.payment.update({
           where: {
             id: payment.id,
@@ -128,27 +200,28 @@ export const sslCommerzIpnController: RequestHandler =
           data: {
             status:
               PaymentStatus.FAILED,
-            failedAt: new Date(),
+            failedAt:
+              new Date(),
             failureReason:
               `SSLCommerz validation status: ${validation.status}`,
             gatewayTransactionId:
               validation.bank_tran_id ??
               payment.gatewayTransactionId,
-            metadata: {
-              ...(typeof payment.metadata ===
-              "object" &&
-              payment.metadata !== null
-                ? (payment.metadata as Record<string, unknown>)
-                : {}),
-              validation: validation as unknown as Prisma.InputJsonValue,
-            },
+            metadata:
+              mergeMetadata(
+                payment.metadata,
+                {
+                  sslcommerz:
+                    validationMetadata,
+                },
+              ),
           },
         });
 
         res.status(200).json({
           success: true,
           message:
-            "Payment validation completed",
+            "Payment validation failed",
           data: {
             transactionId,
             status:
@@ -159,6 +232,10 @@ export const sslCommerzIpnController: RequestHandler =
         return;
       }
 
+      /*
+       * Never accept a transaction when
+       * amount/currency/transaction ID differs.
+       */
       if (
         !amountMatches ||
         !currencyMatches ||
@@ -171,26 +248,103 @@ export const sslCommerzIpnController: RequestHandler =
           data: {
             status:
               PaymentStatus.FAILED,
-            failedAt: new Date(),
+            failedAt:
+              new Date(),
             failureReason:
               "Payment verification failed: amount, currency, or transaction mismatch",
-            metadata: {
-              ...(typeof payment.metadata ===
-              "object" &&
-              payment.metadata !== null
-                ? (payment.metadata as Record<string, unknown>)
-                : {}),
-              validation: validation as unknown as Prisma.InputJsonValue,
-            },
+            gatewayTransactionId:
+              validation.bank_tran_id ??
+              payment.gatewayTransactionId,
+            metadata:
+              mergeMetadata(
+                payment.metadata,
+                {
+                  sslcommerz:
+                    validationMetadata,
+                  verificationFailure: {
+                    amountMatches,
+                    currencyMatches,
+                    transactionMatches,
+                  },
+                },
+              ),
           },
         });
 
-        throw new AppError(
-          "Payment verification failed",
-          400,
-        );
+        res.status(200).json({
+          success: true,
+          message:
+            "Payment verification failed",
+          data: {
+            transactionId,
+            status:
+              PaymentStatus.FAILED,
+          },
+        });
+
+        return;
       }
 
+      /*
+       * Risk handling.
+       *
+       * SSLCommerz may mark a transaction as risky.
+       * We do NOT automatically consider it successful.
+       *
+       * Payment remains PROCESSING so an admin can
+       * review/reconcile it later.
+       */
+      if (
+        validation.risk_level === "1"
+      ) {
+        const processingPayment =
+          await prisma.payment.update({
+            where: {
+              id: payment.id,
+            },
+            data: {
+              status:
+                PaymentStatus.PROCESSING,
+              gatewayTransactionId:
+                validation.bank_tran_id ??
+                payment.gatewayTransactionId,
+              failureReason: null,
+              metadata:
+                mergeMetadata(
+                  payment.metadata,
+                  {
+                    sslcommerz:
+                      validationMetadata,
+                    riskReviewRequired:
+                      true,
+                  },
+                ),
+            },
+          });
+
+        res.status(200).json({
+          success: true,
+          message:
+            "Payment received and requires risk review",
+          data: {
+            paymentId:
+              processingPayment.id,
+            transactionId:
+              processingPayment.transactionId,
+            status:
+              processingPayment.status,
+          },
+        });
+
+        return;
+      }
+
+      /*
+       * Final successful processing.
+       *
+       * Payment update and invoice recalculation
+       * happen inside one transaction.
+       */
       const result =
         await prisma.$transaction(
           async (tx) => {
@@ -208,6 +362,10 @@ export const sslCommerzIpnController: RequestHandler =
               );
             }
 
+            /*
+             * Another IPN request may have completed
+             * the payment while this request was running.
+             */
             if (
               currentPayment.status ===
               PaymentStatus.SUCCESS
@@ -215,10 +373,27 @@ export const sslCommerzIpnController: RequestHandler =
               return currentPayment;
             }
 
+            /*
+             * Do not allow a cancelled/failed payment
+             * to be silently resurrected by an old callback.
+             */
+            if (
+              currentPayment.status ===
+                PaymentStatus.CANCELLED ||
+              currentPayment.status ===
+                PaymentStatus.FAILED
+            ) {
+              throw new AppError(
+                "Payment is no longer eligible for successful processing",
+                409,
+              );
+            }
+
             const updatedPayment =
               await tx.payment.update({
                 where: {
-                  id: currentPayment.id,
+                  id:
+                    currentPayment.id,
                 },
                 data: {
                   status:
@@ -228,19 +403,23 @@ export const sslCommerzIpnController: RequestHandler =
                     currentPayment.gatewayTransactionId,
                   completedAt:
                     new Date(),
+                  failedAt: null,
                   failureReason: null,
-                  metadata: {
-                    ...(typeof currentPayment.metadata ===
-                    "object" &&
-                    currentPayment.metadata !==
-                      null
-                      ? (currentPayment.metadata as Record<string, unknown>)
-                      : {}),
-                    validation: validation as unknown as Prisma.InputJsonValue,
-                  },
+                  metadata:
+                    mergeMetadata(
+                      currentPayment.metadata,
+                      {
+                        sslcommerz:
+                          validationMetadata,
+                      },
+                    ),
                 },
               });
 
+            /*
+             * Recalculate the invoice from successful
+             * payments rather than trusting callback data.
+             */
             const successfulPayments =
               await tx.payment.aggregate({
                 where: {
@@ -255,9 +434,9 @@ export const sslCommerzIpnController: RequestHandler =
               });
 
             const paidAmount =
-              Number(
-                successfulPayments._sum
-                  .amount ?? 0,
+              toNumber(
+                successfulPayments
+                  ._sum.amount ?? 0,
               );
 
             const invoice =
@@ -275,10 +454,27 @@ export const sslCommerzIpnController: RequestHandler =
               );
             }
 
-            const invoiceTotal =
-              Number(invoice.totalAmount);
+            /*
+             * A cancelled invoice must never become
+             * PAID through an old payment callback.
+             */
+            if (
+              invoice.status ===
+              InvoiceStatus.CANCELLED
+            ) {
+              throw new AppError(
+                "Cancelled invoice cannot receive payment",
+                409,
+              );
+            }
 
-            let invoiceStatus: InvoiceStatus;
+            const invoiceTotal =
+              toNumber(
+                invoice.totalAmount,
+              );
+
+            let invoiceStatus:
+              InvoiceStatus;
 
             if (
               paidAmount >=
@@ -320,11 +516,108 @@ export const sslCommerzIpnController: RequestHandler =
         message:
           "Payment verified and processed successfully",
         data: {
-          paymentId: result.id,
+          paymentId:
+            result.id,
           transactionId:
             result.transactionId,
           status:
             result.status,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+/**
+ * SSLCommerz success callback.
+ *
+ * IMPORTANT:
+ * This endpoint does NOT mark the payment successful.
+ * The IPN/validation flow is responsible for that.
+ */
+export const sslCommerzSuccessController:
+  RequestHandler =
+  async (req, res, next) => {
+    try {
+      const payload =
+        req.body as SSLCommerzIpnPayload;
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Payment success callback received",
+        data: {
+          transactionId:
+            payload.tran_id ?? null,
+          validationId:
+            payload.val_id ?? null,
+          status:
+            "AWAITING_SERVER_VERIFICATION",
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+/**
+ * SSLCommerz failure callback.
+ *
+ * IMPORTANT:
+ * This endpoint does NOT directly change
+ * the local payment status.
+ */
+export const sslCommerzFailController:
+  RequestHandler =
+  async (req, res, next) => {
+    try {
+      const payload =
+        req.body as SSLCommerzIpnPayload;
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Payment failure callback received",
+        data: {
+          transactionId:
+            payload.tran_id ?? null,
+          validationId:
+            payload.val_id ?? null,
+          status:
+            "CALLBACK_RECEIVED",
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+/**
+ * SSLCommerz cancellation callback.
+ *
+ * IMPORTANT:
+ * This endpoint does NOT directly change
+ * the local payment status.
+ */
+export const sslCommerzCancelController:
+  RequestHandler =
+  async (req, res, next) => {
+    try {
+      const payload =
+        req.body as SSLCommerzIpnPayload;
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Payment cancellation callback received",
+        data: {
+          transactionId:
+            payload.tran_id ?? null,
+          validationId:
+            payload.val_id ?? null,
+          status:
+            "CALLBACK_RECEIVED",
         },
       });
     } catch (error) {

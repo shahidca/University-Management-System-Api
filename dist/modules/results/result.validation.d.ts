@@ -37,6 +37,9 @@ export declare const resultListQuerySchema: z.ZodObject<{
         desc: "desc";
     }>>;
 }, z.core.$strip>;
+export declare const resultSemesterGpaParamsSchema: z.ZodObject<{
+    semesterId: z.ZodString;
+}, z.core.$strip>;
 export type CreateResultInput = z.infer<typeof createResultSchema>;
 export type UpdateResultInput = z.infer<typeof updateResultSchema>;
 export type ResultListQueryInput = z.infer<typeof resultListQuerySchema>;

@@ -102,9 +102,12 @@ export const getTranscriptsController =
       res: Response,
     ) => {
       const transcript =
-        await approveTranscript(
-          req.params.id as string,
-        );
+       await approveTranscript(
+  req.params.id as string,
+  req.user!.userId,
+  req.ip,
+  req.get("user-agent") ?? undefined,
+);
 
       return sendSuccess(
         res,
@@ -122,9 +125,12 @@ export const getTranscriptsController =
       res: Response,
     ) => {
       const transcript =
-        await issueTranscript(
-          req.params.id as string,
-        );
+      await issueTranscript(
+  req.params.id as string,
+  req.user!.userId,
+  req.ip,
+  req.get("user-agent") ?? undefined,
+);
 
       return sendSuccess(
         res,
@@ -142,9 +148,12 @@ export const getTranscriptsController =
       res: Response,
     ) => {
       const transcript =
-        await revokeTranscript(
-          req.params.id as string,
-        );
+       await revokeTranscript(
+  req.params.id as string,
+  req.user!.userId,
+  req.ip,
+  req.get("user-agent") ?? undefined,
+);
 
       return sendSuccess(
         res,

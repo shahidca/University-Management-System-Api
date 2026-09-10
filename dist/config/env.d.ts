@@ -13,5 +13,13 @@ export declare const env: {
     SMTP_PASSWORD: string;
     SMTP_FROM: string;
     GOOGLE_CLIENT_ID: string;
+    SSLCOMMERZ_STORE_ID: string;
+    SSLCOMMERZ_STORE_PASSWORD: string;
+    SSLCOMMERZ_IS_LIVE: boolean;
+    SSLCOMMERZ_BASE_URL: string;
+    SSLCOMMERZ_SUCCESS_URL: string;
+    SSLCOMMERZ_FAIL_URL: string;
+    SSLCOMMERZ_CANCEL_URL: string;
+    SSLCOMMERZ_IPN_URL: string;
 };
 //# sourceMappingURL=env.d.ts.map

@@ -1,7 +1,12 @@
 import { Prisma } from "@prisma/client";
 import type { Role } from "@prisma/client";
-import { type GpaCourseResult } from "./result.gpa.js";
+import { type ExamResultInput } from "./result.course-grade.js";
 import type { CreateResultInput, ResultListQueryInput, UpdateResultInput } from "./result.validation.js";
+/**
+ * ---------------------------------------------------------
+ * CREATE RESULT
+ * ---------------------------------------------------------
+ */
 export declare const createResult: (userId: string, input: CreateResultInput) => Promise<{
     approvedAt: Date | null;
     createdAt: Date;
@@ -79,6 +84,11 @@ export declare const createResult: (userId: string, input: CreateResultInput) =>
     submittedAt: Date | null;
     updatedAt: Date;
 }>;
+/**
+ * ---------------------------------------------------------
+ * GET RESULT BY ID
+ * ---------------------------------------------------------
+ */
 export declare const getResultById: (userId: string, role: Role, id: string) => Promise<{
     approvedAt: Date | null;
     createdAt: Date;
@@ -156,6 +166,11 @@ export declare const getResultById: (userId: string, role: Role, id: string) => 
     submittedAt: Date | null;
     updatedAt: Date;
 }>;
+/**
+ * ---------------------------------------------------------
+ * GET RESULTS
+ * ---------------------------------------------------------
+ */
 export declare const getResults: (userId: string, role: Role, query: ResultListQueryInput) => Promise<{
     items: {
         approvedAt: Date | null;
@@ -241,6 +256,11 @@ export declare const getResults: (userId: string, role: Role, query: ResultListQ
         totalPages: number;
     };
 }>;
+/**
+ * ---------------------------------------------------------
+ * UPDATE RESULT
+ * ---------------------------------------------------------
+ */
 export declare const updateResult: (userId: string, resultId: string, input: UpdateResultInput) => Promise<{
     approvedAt: Date | null;
     createdAt: Date;
@@ -318,6 +338,11 @@ export declare const updateResult: (userId: string, resultId: string, input: Upd
     submittedAt: Date | null;
     updatedAt: Date;
 }>;
+/**
+ * ---------------------------------------------------------
+ * SUBMIT RESULT
+ * ---------------------------------------------------------
+ */
 export declare const submitResult: (userId: string, resultId: string) => Promise<{
     approvedAt: Date | null;
     createdAt: Date;
@@ -395,6 +420,11 @@ export declare const submitResult: (userId: string, resultId: string) => Promise
     submittedAt: Date | null;
     updatedAt: Date;
 }>;
+/**
+ * ---------------------------------------------------------
+ * APPROVE RESULT
+ * ---------------------------------------------------------
+ */
 export declare const approveResult: (resultId: string) => Promise<{
     approvedAt: Date | null;
     createdAt: Date;
@@ -472,6 +502,11 @@ export declare const approveResult: (resultId: string) => Promise<{
     submittedAt: Date | null;
     updatedAt: Date;
 }>;
+/**
+ * ---------------------------------------------------------
+ * PUBLISH RESULT
+ * ---------------------------------------------------------
+ */
 export declare const publishResult: (resultId: string) => Promise<{
     approvedAt: Date | null;
     createdAt: Date;
@@ -549,11 +584,15 @@ export declare const publishResult: (resultId: string) => Promise<{
     submittedAt: Date | null;
     updatedAt: Date;
 }>;
+/**
+ * ---------------------------------------------------------
+ * GET STUDENT SEMESTER GPA
+ * ---------------------------------------------------------
+ */
 export declare const getStudentSemesterGpa: (userId: string, semesterId: string) => Promise<{
     totalCredits: number;
     totalQualityPoints: number;
     gpa: number;
-    courses: GpaCourseResult[];
     student: {
         id: string;
         studentId: string;
@@ -565,17 +604,65 @@ export declare const getStudentSemesterGpa: (userId: string, semesterId: string)
         id: string;
         name: string;
     };
+    courses: {
+        semesterId: string;
+        courseId: string;
+        courseCode: string;
+        courseTitle: string;
+        credits: number;
+        grade: string;
+        gradePoint: number;
+        percentage: number;
+        totalMarksObtained: number;
+        totalMarks: number;
+        exams: ExamResultInput[];
+    }[];
 }>;
+/**
+ * ---------------------------------------------------------
+ * GET STUDENT CGPA
+ * ---------------------------------------------------------
+ *
+ * Important:
+ *
+ * CGPA must count each course only once per semester.
+ *
+ * Example:
+ *
+ * Semester 1:
+ *   CSE101 → one course
+ *
+ * Semester 2:
+ *   CSE101 → another course attempt
+ *
+ * These are two academic records because they belong to
+ * different semesters.
+ *
+ * Multiple exams inside the same course/semester are
+ * aggregated into ONE course result.
+ */
 export declare const getStudentCgpa: (userId: string) => Promise<{
     totalCredits: number;
     totalQualityPoints: number;
     gpa: number;
-    courses: GpaCourseResult[];
     student: {
         id: string;
         studentId: string;
         firstName: string;
         lastName: string;
     };
+    courses: {
+        semesterId: string;
+        courseId: string;
+        courseCode: string;
+        courseTitle: string;
+        credits: number;
+        grade: string;
+        gradePoint: number;
+        percentage: number;
+        totalMarksObtained: number;
+        totalMarks: number;
+        exams: ExamResultInput[];
+    }[];
 }>;
 //# sourceMappingURL=result.service.d.ts.map

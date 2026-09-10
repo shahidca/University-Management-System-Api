@@ -44,6 +44,14 @@ const envSchema = z.object({
     GOOGLE_CLIENT_ID: z
         .string()
         .min(1, "Google Client ID is required"),
+    SSLCOMMERZ_STORE_ID: z.string().min(1),
+    SSLCOMMERZ_STORE_PASSWORD: z.string().min(1),
+    SSLCOMMERZ_IS_LIVE: z.coerce.boolean().default(false),
+    SSLCOMMERZ_BASE_URL: z.string().url(),
+    SSLCOMMERZ_SUCCESS_URL: z.string().url(),
+    SSLCOMMERZ_FAIL_URL: z.string().url(),
+    SSLCOMMERZ_CANCEL_URL: z.string().url(),
+    SSLCOMMERZ_IPN_URL: z.string().url(),
 });
 const parsedEnv = envSchema.safeParse(process.env);
 if (!parsedEnv.success) {
