@@ -7,6 +7,9 @@ import type {
   CreateEnrollmentInput,
   EnrollmentListQueryInput,
 } from "./enrollment.validation.js";
+import { enrollmentNotification } from "../notifications/notification.templates.js";
+import { sendNotification } from "../notifications/notification.helper.js";
+
 
 /*
  * Maximum number of credits a student can take
@@ -829,80 +832,96 @@ export const createEnrollment = async (
   );
 
   try {
-    const enrollment =
-      await prisma.$transaction(
-        async (tx) => {
-          /*
-           * Atomically reserve one seat.
-           *
-           * This prevents two concurrent requests
-           * from exceeding section capacity.
-           */
-          const capacityUpdate =
-            await tx.section.updateMany({
-              where: {
-                id: section.id,
-                isActive: true,
+const enrollment =
+  await prisma.$transaction(
+    async (tx) => {
+      /*
+       * Atomically reserve one seat.
+       *
+       * This prevents two concurrent requests
+       * from exceeding section capacity.
+       */
+      const capacityUpdate =
+        await tx.section.updateMany({
+          where: {
+            id: section.id,
+            isActive: true,
 
-                enrolledCount: {
-                  lt: section.capacity,
-                },
-              },
+            enrolledCount: {
+              lt: section.capacity,
+            },
+          },
 
-              data: {
-                enrolledCount: {
-                  increment: 1,
-                },
-              },
-            });
+          data: {
+            enrolledCount: {
+              increment: 1,
+            },
+          },
+        });
 
-          if (
-            capacityUpdate.count !== 1
-          ) {
-            throw new AppError(
-              "Section is full",
-              409,
-            );
-          }
+      if (capacityUpdate.count !== 1) {
+        throw new AppError(
+          "Section is full",
+          409,
+        );
+      }
 
-          try {
-            return await tx.enrollment.create({
-              data: {
-                studentId: student.id,
-                sectionId: section.id,
-                status: "ENROLLED",
-                enrolledAt: new Date(),
-              },
+      try {
+        return await tx.enrollment.create({
+          data: {
+            studentId: student.id,
+            sectionId: section.id,
+            status: "ENROLLED",
+            enrolledAt: new Date(),
+          },
 
-              select: enrollmentSelect,
-            });
-          } catch (error) {
-            /*
-             * P2002 means the unique
-             * studentId + sectionId constraint
-             * was violated.
-             *
-             * Because this occurs inside the
-             * transaction, the seat increment
-             * is rolled back automatically.
-             */
-            if (
-              error instanceof
-                Prisma.PrismaClientKnownRequestError &&
-              error.code === "P2002"
-            ) {
-              throw new AppError(
-                "Student is already enrolled in this section",
-                409,
-              );
-            }
+          select: enrollmentSelect,
+        });
+      } catch (error) {
+        /*
+         * P2002 means the unique
+         * studentId + sectionId constraint
+         * was violated.
+         *
+         * Because this occurs inside the
+         * transaction, the seat increment
+         * is rolled back automatically.
+         */
+        if (
+          error instanceof
+            Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2002"
+        ) {
+          throw new AppError(
+            "Student is already enrolled in this section",
+            409,
+          );
+        }
 
-            throw error;
-          }
-        },
-      );
+        throw error;
+      }
+    },
+  );
 
-    return enrollment;
+/*
+ * The transaction has committed successfully.
+ *
+ * Notification is intentionally outside the
+ * transaction so a notification failure cannot
+ * roll back a successful enrollment.
+ */
+const notification =
+  enrollmentNotification(
+    section.courseOffering.course.code,
+    section.sectionCode,
+  );
+
+await sendNotification({
+  userId,
+  ...notification,
+});
+
+return enrollment;
   } catch (error) {
     if (error instanceof AppError) {
       throw error;

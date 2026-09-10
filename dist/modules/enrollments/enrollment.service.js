@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/database.js";
 import { AppError } from "../../utils/app-error.js";
+import { enrollmentNotification } from "../notifications/notification.templates.js";
+import { sendNotification } from "../notifications/notification.helper.js";
 /*
  * Maximum number of credits a student can take
  * during one semester.
@@ -611,6 +613,18 @@ export const createEnrollment = async (userId, input) => {
                 }
                 throw error;
             }
+        });
+        /*
+         * The transaction has committed successfully.
+         *
+         * Notification is intentionally outside the
+         * transaction so a notification failure cannot
+         * roll back a successful enrollment.
+         */
+        const notification = enrollmentNotification(section.courseOffering.course.code, section.sectionCode);
+        await sendNotification({
+            userId,
+            ...notification,
         });
         return enrollment;
     }

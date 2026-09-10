@@ -11,6 +11,7 @@ import type {
   NotificationListQuery,
 } from "./notification.types.js";
 
+
 const notificationSelect = {
   id: true,
   userId: true,
@@ -278,3 +279,4 @@ export const deleteMyNotification = async (
     id: notification.id,
   };
 };
+
