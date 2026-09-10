@@ -16,5 +16,5 @@ export interface PaymentReconciliationResult {
         totalAmount: string;
     };
 }
-export declare const reconcilePayment: (paymentId: string) => Promise<PaymentReconciliationResult>;
+export declare const reconcilePayment: (paymentId: string, actorId: string, ipAddress?: string, userAgent?: string) => Promise<PaymentReconciliationResult>;
 //# sourceMappingURL=payment.reconciliation.service.d.ts.map

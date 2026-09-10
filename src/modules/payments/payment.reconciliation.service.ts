@@ -114,6 +114,9 @@ export interface PaymentReconciliationResult {
 
 export const reconcilePayment = async (
   paymentId: string,
+  actorId: string,
+  ipAddress?: string,
+  userAgent?: string,
 ): Promise<PaymentReconciliationResult> => {
   const payment =
     await prisma.payment.findUnique({
@@ -293,15 +296,47 @@ export const reconcilePayment = async (
           PaymentStatus.SUCCESS
         ) {
           const invoiceStatus =
-            await recalculateInvoiceStatus(
-              tx,
-              payment.invoiceId,
-            );
+  await recalculateInvoiceStatus(
+    tx,
+    payment.invoiceId,
+  );
 
-          return {
-            changed: false,
-            invoice: invoiceStatus,
-          };
+await tx.auditLog.create({
+  data: {
+    actorId,
+    action: "PAYMENT_RECONCILED",
+    entity: "Payment",
+    entityId: payment.id,
+    oldValue: {
+      status: currentPayment.status,
+      invoiceId: payment.invoiceId,
+      transactionId:
+        payment.transactionId,
+    },
+    newValue: {
+      status: PaymentStatus.SUCCESS,
+      gatewayStatus,
+      gatewayTransactionId,
+      invoiceStatus:
+        invoiceStatus.status,
+      paidAmount:
+        invoiceStatus.paidAmount.toString(),
+      totalAmount:
+        invoiceStatus.totalAmount.toString(),
+    },
+    ...(ipAddress !== undefined
+      ? { ipAddress }
+      : {}),
+    ...(userAgent !== undefined
+      ? { userAgent }
+      : {}),
+  },
+});
+
+return {
+  changed: true,
+  invoice: invoiceStatus,
+};
         }
 
         if (

@@ -16,10 +16,14 @@ export const reconcilePaymentController =
       req: Request,
       res: Response,
     ) => {
-      const result =
-        await reconcilePayment(
-          req.params.id as string,
-        );
+    const result =
+  await reconcilePayment(
+    req.params.id as string,
+    req.user!.userId,
+    req.ip,
+    req.get("user-agent") ??
+      undefined,
+  );
 
       return sendSuccess(
         res,
