@@ -3,6 +3,8 @@ import { prisma } from "../../config/database.js";
 import { AppError } from "../../utils/app-error.js";
 import { calculateCgpa, calculateGpa, } from "../results/result.gpa.js";
 import { calculateCourseGrade, } from "../results/result.course-grade.js";
+import { transcriptIssuedNotification, } from "../notifications/notification.templates.js";
+import { sendNotification, } from "../notifications/notification.helper.js";
 /**
  * ---------------------------------------------------------
  * TRANSCRIPT SELECT
@@ -539,10 +541,18 @@ export const approveTranscript = async (id, actorId, ipAddress, userAgent) => {
  * ---------------------------------------------------------
  *
  * APPROVED → ISSUED
+ *
+ * IMPORTANT:
+ * The transcript state change and AuditLog are committed
+ * first. The student notification happens AFTER the
+ * transaction succeeds.
+ *
+ * Notification failure must never roll back an issued
+ * transcript.
  */
 export const issueTranscript = async (id, actorId, ipAddress, userAgent) => {
-    return prisma.$transaction(async (tx) => {
-        const transcript = await tx.transcript.findUnique({
+    const transcript = await prisma.$transaction(async (tx) => {
+        const existingTranscript = await tx.transcript.findUnique({
             where: {
                 id,
             },
@@ -552,14 +562,17 @@ export const issueTranscript = async (id, actorId, ipAddress, userAgent) => {
                 transcriptNo: true,
             },
         });
-        if (!transcript) {
+        if (!existingTranscript) {
             throw new AppError("Transcript not found", 404);
         }
-        if (transcript.status !==
+        if (existingTranscript.status !==
             "APPROVED") {
-            throw new AppError(`Transcript cannot be issued from ${transcript.status} status`, 400);
+            throw new AppError(`Transcript cannot be issued from ${existingTranscript.status} status`, 400);
         }
         const issuedAt = new Date();
+        /**
+         * Atomic state transition.
+         */
         const updated = await tx.transcript.updateMany({
             where: {
                 id,
@@ -588,9 +601,9 @@ export const issueTranscript = async (id, actorId, ipAddress, userAgent) => {
                 actorId,
                 action: "TRANSCRIPT_ISSUED",
                 entity: "Transcript",
-                entityId: transcript.id,
+                entityId: existingTranscript.id,
                 oldValue: {
-                    status: transcript.status,
+                    status: existingTranscript.status,
                 },
                 newValue: {
                     status: "ISSUED",
@@ -612,6 +625,43 @@ export const issueTranscript = async (id, actorId, ipAddress, userAgent) => {
         });
         return transcriptAfter;
     });
+    /**
+     * -------------------------------------------------------
+     * STUDENT NOTIFICATION
+     * -------------------------------------------------------
+     *
+     * This happens AFTER the transaction has committed.
+     *
+     * Therefore a notification failure cannot undo
+     * the successful transcript issuance.
+     */
+    try {
+        const student = await prisma.studentProfile.findUnique({
+            where: {
+                id: transcript.studentId,
+            },
+            select: {
+                userId: true,
+            },
+        });
+        if (!student) {
+            console.error("Transcript issued but student profile was not found for notification:", transcript.id);
+            return transcript;
+        }
+        const notification = transcriptIssuedNotification(transcript.transcriptNo);
+        await sendNotification({
+            userId: student.userId,
+            ...notification,
+        });
+    }
+    catch (error) {
+        /**
+         * Notification failure must not affect the
+         * already committed transcript issuance.
+         */
+        console.error("Failed to send transcript issued notification:", error);
+    }
+    return transcript;
 };
 /**
  * ---------------------------------------------------------

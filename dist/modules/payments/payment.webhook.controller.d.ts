@@ -6,8 +6,8 @@ import type { RequestHandler } from "express";
  *
  * IMPORTANT:
  * We never trust the IPN status alone.
- * The transaction is validated against SSLCommerz's
- * validation API before local payment state is changed.
+ * The transaction is validated directly against
+ * SSLCommerz's validation API before local state changes.
  */
 export declare const sslCommerzIpnController: RequestHandler;
 /**

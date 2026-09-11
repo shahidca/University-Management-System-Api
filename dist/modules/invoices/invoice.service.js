@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/database.js";
 import { AppError } from "../../utils/app-error.js";
+import { invoiceCreatedNotification, } from "../notifications/notification.templates.js";
+import { sendNotification, } from "../notifications/notification.helper.js";
 const invoiceSelect = {
     id: true,
     studentId: true,
@@ -62,36 +64,6 @@ const generateInvoiceNumber = () => {
         Math.random() * 900000);
     return `INV-${year}${month}${day}-${randomPart}`;
 };
-// const calculateInvoiceTotals = (
-//   items: Array<{
-//     quantity: number;
-//     amount: Prisma.Decimal;
-//   }>,
-//   discount: Prisma.Decimal,
-// ) => {
-//   const subtotal = items.reduce(
-//     (sum, item) =>
-//       sum +
-//       item.amount
-//         .mul(item.quantity),
-//     new Prisma.Decimal(0),
-//   );
-//   if (
-//     discount.greaterThan(subtotal)
-//   ) {
-//     throw new AppError(
-//       "Discount cannot be greater than invoice subtotal",
-//       400,
-//     );
-//   }
-//   const totalAmount =
-//     subtotal.sub(discount);
-//   return {
-//     subtotal,
-//     discount,
-//     totalAmount,
-//   };
-// };
 export const createInvoice = async (input) => {
     const discount = new Prisma.Decimal(input.discount ?? 0);
     const result = await prisma.$transaction(async (tx) => {
@@ -208,6 +180,19 @@ export const createInvoice = async (input) => {
             throw new AppError("Unable to generate a unique invoice number", 500);
         }
         return invoice;
+    });
+    /*
+     * Notification is intentionally outside
+     * the invoice transaction.
+     *
+     * If notification creation fails,
+     * the successfully-created invoice
+     * must not be rolled back.
+     */
+    const notification = invoiceCreatedNotification(result.invoiceNumber, result.totalAmount.toString());
+    await sendNotification({
+        userId: result.student.user.id,
+        ...notification,
     });
     return result;
 };

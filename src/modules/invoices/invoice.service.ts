@@ -3,6 +3,14 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/database.js";
 import { AppError } from "../../utils/app-error.js";
 
+import {
+  invoiceCreatedNotification,
+} from "../notifications/notification.templates.js";
+
+import {
+  sendNotification,
+} from "../notifications/notification.helper.js";
+
 import type {
   CreateInvoiceInput,
   InvoiceListQuery,
@@ -88,39 +96,7 @@ const generateInvoiceNumber = (): string => {
   return `INV-${year}${month}${day}-${randomPart}`;
 };
 
-// const calculateInvoiceTotals = (
-//   items: Array<{
-//     quantity: number;
-//     amount: Prisma.Decimal;
-//   }>,
-//   discount: Prisma.Decimal,
-// ) => {
-//   const subtotal = items.reduce(
-//     (sum, item) =>
-//       sum +
-//       item.amount
-//         .mul(item.quantity),
-//     new Prisma.Decimal(0),
-//   );
 
-//   if (
-//     discount.greaterThan(subtotal)
-//   ) {
-//     throw new AppError(
-//       "Discount cannot be greater than invoice subtotal",
-//       400,
-//     );
-//   }
-
-//   const totalAmount =
-//     subtotal.sub(discount);
-
-//   return {
-//     subtotal,
-//     discount,
-//     totalAmount,
-//   };
-// };
 
 export const createInvoice = async (
   input: CreateInvoiceInput,
@@ -133,19 +109,17 @@ export const createInvoice = async (
     await prisma.$transaction(
       async (tx) => {
         const student =
-          await tx.studentProfile.findUnique(
-            {
-              where: {
-                id: input.studentId,
-              },
-              select: {
-                id: true,
-                studentId: true,
-                firstName: true,
-                lastName: true,
-              },
+          await tx.studentProfile.findUnique({
+            where: {
+              id: input.studentId,
             },
-          );
+            select: {
+              id: true,
+              studentId: true,
+              firstName: true,
+              lastName: true,
+            },
+          });
 
         if (!student) {
           throw new AppError(
@@ -179,7 +153,6 @@ export const createInvoice = async (
                 in: feeIds,
               },
             },
-
             select: {
               id: true,
               name: true,
@@ -306,54 +279,52 @@ export const createInvoice = async (
         ) {
           try {
             invoice =
-              await tx.invoice.create(
-                {
-                  data: {
-                    studentId:
-                      student.id,
+              await tx.invoice.create({
+                data: {
+                  studentId:
+                    student.id,
 
-                    invoiceNumber,
+                  invoiceNumber,
 
-                    subtotal,
+                  subtotal,
 
-                    discount,
+                  discount,
 
-                    totalAmount,
+                  totalAmount,
 
-                    dueDate:
-                      input.dueDate,
+                  dueDate:
+                    input.dueDate,
 
-                    description:
-                      input.description?.trim() ||
-                      null,
+                  description:
+                    input.description?.trim() ||
+                    null,
 
-                    items: {
-                      create:
-                        calculatedItems.map(
-                          (item) => ({
-                            feeId:
-                              item.feeId,
+                  items: {
+                    create:
+                      calculatedItems.map(
+                        (item) => ({
+                          feeId:
+                            item.feeId,
 
-                            description:
-                              item.description,
+                          description:
+                            item.description,
 
-                            quantity:
-                              item.quantity,
+                          quantity:
+                            item.quantity,
 
-                            unitAmount:
-                              item.unitAmount,
+                          unitAmount:
+                            item.unitAmount,
 
-                            totalAmount:
-                              item.totalAmount,
-                          }),
-                        ),
-                    },
+                          totalAmount:
+                            item.totalAmount,
+                        }),
+                      ),
                   },
-
-                  select:
-                    invoiceSelect,
                 },
-              );
+
+                select:
+                  invoiceSelect,
+              });
 
             break;
           } catch (error) {
@@ -382,6 +353,25 @@ export const createInvoice = async (
         return invoice;
       },
     );
+
+  /*
+   * Notification is intentionally outside
+   * the invoice transaction.
+   *
+   * If notification creation fails,
+   * the successfully-created invoice
+   * must not be rolled back.
+   */
+  const notification =
+    invoiceCreatedNotification(
+      result.invoiceNumber,
+      result.totalAmount.toString(),
+    );
+
+  await sendNotification({
+    userId: result.student.user.id,
+    ...notification,
+  });
 
   return result;
 };

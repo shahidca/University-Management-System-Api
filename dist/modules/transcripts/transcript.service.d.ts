@@ -180,6 +180,14 @@ export declare const approveTranscript: (id: string, actorId: string, ipAddress?
  * ---------------------------------------------------------
  *
  * APPROVED → ISSUED
+ *
+ * IMPORTANT:
+ * The transcript state change and AuditLog are committed
+ * first. The student notification happens AFTER the
+ * transaction succeeds.
+ *
+ * Notification failure must never roll back an issued
+ * transcript.
  */
 export declare const issueTranscript: (id: string, actorId: string, ipAddress?: string, userAgent?: string) => Promise<{
     approvedAt: Date | null;

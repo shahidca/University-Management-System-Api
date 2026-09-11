@@ -1,6 +1,8 @@
 import { InvoiceStatus, PaymentStatus, Prisma, } from "@prisma/client";
 import { prisma } from "../../config/database.js";
 import { AppError } from "../../utils/app-error.js";
+import { paymentSuccessfulNotification, } from "../notifications/notification.templates.js";
+import { sendNotification, } from "../notifications/notification.helper.js";
 import { validateSSLCommerzPayment, } from "./sslcommerz.service.js";
 const toNumber = (value) => {
     const number = Number(value);
@@ -31,8 +33,8 @@ const mergeMetadata = (existing, extra) => {
  *
  * IMPORTANT:
  * We never trust the IPN status alone.
- * The transaction is validated against SSLCommerz's
- * validation API before local payment state is changed.
+ * The transaction is validated directly against
+ * SSLCommerz's validation API before local state changes.
  */
 export const sslCommerzIpnController = async (req, res, next) => {
     try {
@@ -47,8 +49,27 @@ export const sslCommerzIpnController = async (req, res, next) => {
             where: {
                 transactionId,
             },
-            include: {
-                invoice: true,
+            select: {
+                id: true,
+                invoiceId: true,
+                transactionId: true,
+                amount: true,
+                currency: true,
+                status: true,
+                gatewayTransactionId: true,
+                metadata: true,
+                invoice: {
+                    select: {
+                        id: true,
+                        status: true,
+                        totalAmount: true,
+                        student: {
+                            select: {
+                                userId: true,
+                            },
+                        },
+                    },
+                },
             },
         });
         if (!payment) {
@@ -57,8 +78,11 @@ export const sslCommerzIpnController = async (req, res, next) => {
         /*
          * Idempotency.
          *
-         * SSLCommerz may send the same notification
+         * SSLCommerz may send the same IPN
          * more than once.
+         *
+         * A payment already marked SUCCESS must
+         * never trigger another notification.
          */
         if (payment.status ===
             PaymentStatus.SUCCESS) {
@@ -171,11 +195,8 @@ export const sslCommerzIpnController = async (req, res, next) => {
         /*
          * Risk handling.
          *
-         * SSLCommerz may mark a transaction as risky.
-         * We do NOT automatically consider it successful.
-         *
-         * Payment remains PROCESSING so an admin can
-         * review/reconcile it later.
+         * A risky transaction remains PROCESSING.
+         * It is not automatically considered successful.
          */
         if (validation.risk_level === "1") {
             const processingPayment = await prisma.payment.update({
@@ -211,9 +232,34 @@ export const sslCommerzIpnController = async (req, res, next) => {
          * happen inside one transaction.
          */
         const result = await prisma.$transaction(async (tx) => {
+            /*
+             * Serialize payment state changes
+             * for the same invoice.
+             *
+             * This prevents concurrent IPNs from
+             * processing the same payment simultaneously.
+             */
+            await tx.$executeRaw `
+              SELECT pg_advisory_xact_lock(
+                hashtextextended(
+                  ${payment.invoiceId},
+                  0
+                )
+              )
+            `;
             const currentPayment = await tx.payment.findUnique({
                 where: {
                     id: payment.id,
+                },
+                select: {
+                    id: true,
+                    invoiceId: true,
+                    transactionId: true,
+                    status: true,
+                    amount: true,
+                    currency: true,
+                    gatewayTransactionId: true,
+                    metadata: true,
                 },
             });
             if (!currentPayment) {
@@ -222,13 +268,21 @@ export const sslCommerzIpnController = async (req, res, next) => {
             /*
              * Another IPN request may have completed
              * the payment while this request was running.
+             *
+             * changed=false means:
+             * - do not send another notification
+             * - do not treat this request as the
+             *   successful transition
              */
             if (currentPayment.status ===
                 PaymentStatus.SUCCESS) {
-                return currentPayment;
+                return {
+                    payment: currentPayment,
+                    changed: false,
+                };
             }
             /*
-             * Do not allow a cancelled/failed payment
+             * Do not allow cancelled/failed payments
              * to be silently resurrected by an old callback.
              */
             if (currentPayment.status ===
@@ -254,7 +308,7 @@ export const sslCommerzIpnController = async (req, res, next) => {
                 },
             });
             /*
-             * Recalculate the invoice from successful
+             * Recalculate invoice from successful
              * payments rather than trusting callback data.
              */
             const successfulPayments = await tx.payment.aggregate({
@@ -271,6 +325,11 @@ export const sslCommerzIpnController = async (req, res, next) => {
             const invoice = await tx.invoice.findUnique({
                 where: {
                     id: currentPayment.invoiceId,
+                },
+                select: {
+                    id: true,
+                    status: true,
+                    totalAmount: true,
                 },
             });
             if (!invoice) {
@@ -311,15 +370,38 @@ export const sslCommerzIpnController = async (req, res, next) => {
                         : null,
                 },
             });
-            return updatedPayment;
+            return {
+                payment: updatedPayment,
+                changed: true,
+            };
         });
+        /*
+         * Send notification only when THIS request
+         * actually transitioned the payment to SUCCESS.
+         *
+         * Notification failure does not roll back
+         * the successful payment.
+         */
+        if (result.changed) {
+            const notification = paymentSuccessfulNotification(payment.transactionId, payment.amount.toString());
+            const studentUserId = payment.invoice.student.userId;
+            if (studentUserId) {
+                await sendNotification({
+                    userId: studentUserId,
+                    ...notification,
+                });
+            }
+            else {
+                console.error("Payment succeeded but student user was not found for notification:", payment.id);
+            }
+        }
         res.status(200).json({
             success: true,
             message: "Payment verified and processed successfully",
             data: {
-                paymentId: result.id,
-                transactionId: result.transactionId,
-                status: result.status,
+                paymentId: result.payment.id,
+                transactionId: result.payment.transactionId,
+                status: result.payment.status,
             },
         });
     }

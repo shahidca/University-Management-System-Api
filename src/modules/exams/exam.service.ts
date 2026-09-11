@@ -9,6 +9,14 @@ import type {
   UpdateExamInput,
 } from "./exam.validation.js";
 
+import {
+  examPublishedNotification,
+} from "../notifications/notification.templates.js";
+
+import {
+  sendNotification,
+} from "../notifications/notification.helper.js";
+
 const examSelect = {
   id: true,
   sectionId: true,
@@ -824,10 +832,12 @@ export const publishExam = async (
       },
       select: {
         id: true,
+        title: true,
         isPublished: true,
 
         section: {
           select: {
+            id: true,
             instructorId: true,
             isActive: true,
 
@@ -837,6 +847,9 @@ export const publishExam = async (
 
                 course: {
                   select: {
+                    id: true,
+                    code: true,
+                    title: true,
                     isActive: true,
                     deletedAt: true,
                   },
@@ -863,8 +876,7 @@ export const publishExam = async (
 
   validateInstructorOwnership(
     instructor.id,
-    exam.section
-      .instructorId,
+    exam.section.instructorId,
   );
 
   if (exam.isPublished) {
@@ -882,8 +894,7 @@ export const publishExam = async (
   }
 
   if (
-    !exam.section.courseOffering
-      .isActive
+    !exam.section.courseOffering.isActive
   ) {
     throw new AppError(
       "Course offering is inactive",
@@ -892,10 +903,10 @@ export const publishExam = async (
   }
 
   if (
-    !exam.section.courseOffering
-      .course.isActive ||
-    exam.section.courseOffering
-      .course.deletedAt
+    !exam.section.courseOffering.course
+      .isActive ||
+    exam.section.courseOffering.course
+      .deletedAt
   ) {
     throw new AppError(
       "Course is inactive or deleted",
@@ -904,8 +915,8 @@ export const publishExam = async (
   }
 
   if (
-    exam.section.courseOffering
-      .semester.status === "COMPLETED"
+    exam.section.courseOffering.semester
+      .status === "COMPLETED"
   ) {
     throw new AppError(
       "Cannot publish an exam from a completed semester",
@@ -913,15 +924,66 @@ export const publishExam = async (
     );
   }
 
-  return prisma.exam.update({
-    where: {
-      id: examId,
-    },
-    data: {
-      isPublished: true,
-    },
-    select: examSelect,
-  });
+  /*
+   * Publish the exam first.
+   *
+   * The notification must only be sent after
+   * this database operation succeeds.
+   */
+  const publishedExam =
+    await prisma.exam.update({
+      where: {
+        id: examId,
+      },
+      data: {
+        isPublished: true,
+      },
+      select: examSelect,
+    });
+
+  /*
+   * Find all currently enrolled students
+   * in this section.
+   *
+   * Only ENROLLED students should receive
+   * the exam publication notification.
+   */
+  const enrolledStudents =
+    await prisma.enrollment.findMany({
+      where: {
+        sectionId: exam.section.id,
+        status: "ENROLLED",
+      },
+      select: {
+        student: {
+          select: {
+            userId: true,
+          },
+        },
+      },
+    });
+
+  /*
+   * Create notifications after the exam has
+   * successfully been published.
+   *
+   * Notification failure must not undo the
+   * successful exam publication.
+   */
+  const notification =
+    examPublishedNotification(
+      exam.section.courseOffering.course.code,
+      exam.title,
+    );
+
+  for (const enrollment of enrolledStudents) {
+    await sendNotification({
+      userId: enrollment.student.userId,
+      ...notification,
+    });
+  }
+
+  return publishedExam;
 };
 
 export const unpublishExam = async (

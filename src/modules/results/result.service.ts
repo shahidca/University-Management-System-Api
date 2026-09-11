@@ -22,6 +22,14 @@ import type {
   UpdateResultInput,
 } from "./result.validation.js";
 
+import {
+  resultPublishedNotification,
+} from "../notifications/notification.templates.js";
+
+import {
+  sendNotification,
+} from "../notifications/notification.helper.js";
+
 const resultSelect = {
   id: true,
   examId: true,
@@ -1371,10 +1379,13 @@ export const publishResult = async (
 
         exam: {
           select: {
+            id: true,
+            title: true,
             isPublished: true,
 
             section: {
               select: {
+                id: true,
                 isActive: true,
 
                 courseOffering: {
@@ -1383,23 +1394,31 @@ export const publishResult = async (
 
                     course: {
                       select: {
-                        isActive:
-                          true,
-                        deletedAt:
-                          true,
+                        id: true,
+                        code: true,
+                        title: true,
+                        isActive: true,
+                        deletedAt: true,
                       },
                     },
 
                     semester: {
                       select: {
-                        status:
-                          true,
+                        status: true,
                       },
                     },
                   },
                 },
               },
             },
+          },
+        },
+
+        enrollment: {
+          select: {
+            id: true,
+            studentId: true,
+            status: true,
           },
         },
       },
@@ -1413,8 +1432,7 @@ export const publishResult = async (
   }
 
   if (
-    result.status !==
-    "APPROVED"
+    result.status !== "APPROVED"
   ) {
     throw new AppError(
       "Only approved results can be published",
@@ -1424,53 +1442,136 @@ export const publishResult = async (
 
   validateAcademicState({
     sectionActive:
-      result.exam.section
-        .isActive,
+      result.exam.section.isActive,
 
     offeringActive:
       result.exam.section
-        .courseOffering
-        .isActive,
+        .courseOffering.isActive,
 
     courseActive:
       result.exam.section
-        .courseOffering.course
-        .isActive,
+        .courseOffering.course.isActive,
 
     courseDeletedAt:
       result.exam.section
-        .courseOffering.course
-        .deletedAt,
+        .courseOffering.course.deletedAt,
 
     semesterStatus:
       result.exam.section
-        .courseOffering.semester
-        .status,
+        .courseOffering.semester.status,
   });
 
-  if (
-    !result.exam.isPublished
-  ) {
+  if (!result.exam.isPublished) {
     throw new AppError(
       "The related exam is not published",
       400,
     );
   }
 
-  return prisma.result.update({
-    where: {
-      id: resultId,
-    },
+  if (
+    result.enrollment.status !==
+    "ENROLLED"
+  ) {
+    throw new AppError(
+      "Result cannot be published for an inactive enrollment",
+      400,
+    );
+  }
 
-    data: {
-      status: "PUBLISHED",
-      publishedAt:
-        new Date(),
-    },
+  /*
+   * Atomically transition APPROVED → PUBLISHED.
+   *
+   * This prevents concurrent publish requests
+   * from publishing the same result twice and
+   * sending duplicate notifications.
+   */
+  const publication =
+    await prisma.result.updateMany({
+      where: {
+        id: resultId,
+        status: "APPROVED",
+      },
 
-    select:
-      resultSelect,
+      data: {
+        status: "PUBLISHED",
+        publishedAt: new Date(),
+      },
+    });
+
+  if (publication.count !== 1) {
+    throw new AppError(
+      "Result could not be published because its status has changed",
+      409,
+    );
+  }
+
+  /*
+   * Fetch the fully populated published result
+   * after the atomic status transition.
+   */
+  const publishedResult =
+    await prisma.result.findUnique({
+      where: {
+        id: resultId,
+      },
+
+      select: resultSelect,
+    });
+
+  if (!publishedResult) {
+    throw new AppError(
+      "Published result could not be retrieved",
+      500,
+    );
+  }
+
+  /*
+   * Get the student's User ID.
+   *
+   * StudentProfile.studentId and User.id are
+   * intentionally different identifiers.
+   */
+  const student =
+    await prisma.studentProfile.findUnique({
+      where: {
+        id: result.enrollment.studentId,
+      },
+
+      select: {
+        userId: true,
+      },
+    });
+
+  if (!student) {
+    /*
+     * The result is already safely published.
+     * Notification failure must not reverse it.
+     */
+    console.error(
+      "Student profile not found while creating result publication notification:",
+      result.enrollment.studentId,
+    );
+
+    return publishedResult;
+  }
+
+  /*
+   * Notify only after the result has successfully
+   * transitioned to PUBLISHED.
+   */
+  const notification =
+    resultPublishedNotification(
+      result.exam.section
+        .courseOffering.course.code,
+      result.exam.title,
+    );
+
+  await sendNotification({
+    userId: student.userId,
+    ...notification,
   });
+
+  return publishedResult;
 };
 
 /**

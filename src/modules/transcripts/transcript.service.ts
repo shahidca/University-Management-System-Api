@@ -1,4 +1,3 @@
-
 import { Prisma } from "@prisma/client";
 import type { Role } from "@prisma/client";
 
@@ -15,6 +14,14 @@ import {
   calculateCourseGrade,
   type ExamResultInput,
 } from "../results/result.course-grade.js";
+
+import {
+  transcriptIssuedNotification,
+} from "../notifications/notification.templates.js";
+
+import {
+  sendNotification,
+} from "../notifications/notification.helper.js";
 
 import type {
   TranscriptListQueryInput,
@@ -1012,6 +1019,14 @@ export const approveTranscript =
  * ---------------------------------------------------------
  *
  * APPROVED → ISSUED
+ *
+ * IMPORTANT:
+ * The transcript state change and AuditLog are committed
+ * first. The student notification happens AFTER the
+ * transaction succeeds.
+ *
+ * Notification failure must never roll back an issued
+ * transcript.
  */
 
 export const issueTranscript =
@@ -1021,129 +1036,190 @@ export const issueTranscript =
     ipAddress?: string,
     userAgent?: string,
   ) => {
-    return prisma.$transaction(
-      async (tx) => {
-        const transcript =
-          await tx.transcript.findUnique({
-            where: {
-              id,
-            },
+    const transcript =
+      await prisma.$transaction(
+        async (tx) => {
+          const existingTranscript =
+            await tx.transcript.findUnique({
+              where: {
+                id,
+              },
 
-            select: {
-              id: true,
-              status: true,
-              transcriptNo: true,
-            },
-          });
+              select: {
+                id: true,
+                status: true,
+                transcriptNo: true,
+              },
+            });
 
-        if (!transcript) {
-          throw new AppError(
-            "Transcript not found",
-            404,
-          );
-        }
+          if (!existingTranscript) {
+            throw new AppError(
+              "Transcript not found",
+              404,
+            );
+          }
 
-        if (
-          transcript.status !==
-          "APPROVED"
-        ) {
-          throw new AppError(
-            `Transcript cannot be issued from ${transcript.status} status`,
-            400,
-          );
-        }
+          if (
+            existingTranscript.status !==
+            "APPROVED"
+          ) {
+            throw new AppError(
+              `Transcript cannot be issued from ${existingTranscript.status} status`,
+              400,
+            );
+          }
 
-        const issuedAt =
-          new Date();
+          const issuedAt =
+            new Date();
 
-        const updated =
-          await tx.transcript.updateMany({
-            where: {
-              id,
+          /**
+           * Atomic state transition.
+           */
+          const updated =
+            await tx.transcript.updateMany({
+              where: {
+                id,
 
-              status:
-                "APPROVED",
-            },
+                status:
+                  "APPROVED",
+              },
 
+              data: {
+                status:
+                  "ISSUED",
+
+                issuedAt,
+              },
+            });
+
+          if (
+            updated.count !==
+            1
+          ) {
+            throw new AppError(
+              "Transcript issuance failed because its status changed",
+              409,
+            );
+          }
+
+          const transcriptAfter =
+            await tx.transcript.findUnique({
+              where: {
+                id,
+              },
+
+              select:
+                transcriptSelect,
+            });
+
+          if (!transcriptAfter) {
+            throw new AppError(
+              "Transcript not found after issuance",
+              404,
+            );
+          }
+
+          await tx.auditLog.create({
             data: {
-              status:
-                "ISSUED",
+              actorId,
 
-              issuedAt,
+              action:
+                "TRANSCRIPT_ISSUED",
+
+              entity:
+                "Transcript",
+
+              entityId:
+                existingTranscript.id,
+
+              oldValue: {
+                status:
+                  existingTranscript.status,
+              },
+
+              newValue: {
+                status:
+                  "ISSUED",
+
+                issuedAt,
+              },
+
+              ...(ipAddress !==
+              undefined
+                ? {
+                    ipAddress,
+                  }
+                : {}),
+
+              ...(userAgent !==
+              undefined
+                ? {
+                    userAgent,
+                  }
+                : {}),
             },
           });
 
-        if (
-          updated.count !==
-          1
-        ) {
-          throw new AppError(
-            "Transcript issuance failed because its status changed",
-            409,
-          );
-        }
+          return transcriptAfter;
+        },
+      );
 
-        const transcriptAfter =
-          await tx.transcript.findUnique({
-            where: {
-              id,
-            },
+    /**
+     * -------------------------------------------------------
+     * STUDENT NOTIFICATION
+     * -------------------------------------------------------
+     *
+     * This happens AFTER the transaction has committed.
+     *
+     * Therefore a notification failure cannot undo
+     * the successful transcript issuance.
+     */
 
-            select:
-              transcriptSelect,
-          });
+    try {
+      const student =
+        await prisma.studentProfile.findUnique({
+          where: {
+            id:
+              transcript.studentId,
+          },
 
-        if (!transcriptAfter) {
-          throw new AppError(
-            "Transcript not found after issuance",
-            404,
-          );
-        }
-
-        await tx.auditLog.create({
-          data: {
-            actorId,
-
-            action:
-              "TRANSCRIPT_ISSUED",
-
-            entity:
-              "Transcript",
-
-            entityId:
-              transcript.id,
-
-            oldValue: {
-              status:
-                transcript.status,
-            },
-
-            newValue: {
-              status:
-                "ISSUED",
-
-              issuedAt,
-            },
-
-            ...(ipAddress !==
-            undefined
-              ? {
-                  ipAddress,
-                }
-              : {}),
-
-            ...(userAgent !==
-            undefined
-              ? {
-                  userAgent,
-                }
-              : {}),
+          select: {
+            userId: true,
           },
         });
 
-        return transcriptAfter;
-      },
-    );
+      if (!student) {
+        console.error(
+          "Transcript issued but student profile was not found for notification:",
+          transcript.id,
+        );
+
+        return transcript;
+      }
+
+      const notification =
+        transcriptIssuedNotification(
+          transcript.transcriptNo,
+        );
+
+      await sendNotification({
+        userId:
+          student.userId,
+
+        ...notification,
+      });
+    } catch (error) {
+      /**
+       * Notification failure must not affect the
+       * already committed transcript issuance.
+       */
+      console.error(
+        "Failed to send transcript issued notification:",
+        error,
+      );
+    }
+
+    return transcript;
   };
 
 /**
@@ -1420,4 +1496,3 @@ export const getStudentTranscripts =
       },
     };
   };
-
